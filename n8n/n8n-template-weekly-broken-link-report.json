@@ -129,7 +129,7 @@
     {
       "parameters": {
         "content": "## Email yourself a weekly broken link report for your website\n\n**Who's it for:** site owners, SEO people and agencies who want to hear about 404s, dead external links and broken images before visitors and Google do, without installing a crawler.\n\n**How it works**\n1. **Every Monday** starts the workflow (change the schedule as you like).\n2. **Check links** runs the Apify Actor *Broken Link Checker*. It crawls your site from the start URL, checks every link and image it finds (internal and external) and returns each problem with the pages it is on and its link text.\n3. **Build report** keeps the broken links (404, 410, 5xx, dead domains, timeouts) and writes a plain-text e-mail. If nothing is broken, the workflow stops and no e-mail is sent.\n4. **Email report** sends it with Gmail.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Check links**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **Configure**, set your site, the page limit and the e-mail address.\n4. Connect your Gmail credential in **Email report** and run once to test.\n\n**Requirements:** an Apify account. $0.50 per 1,000 URLs checked; `maxLinksToCheck` caps the price of each run. The run is capped at about 4 minutes so it fits n8n's wait, which covers a site of a few hundred pages.\n\n**How to customize:** set `includeWarnings` to `true` to also list links that refuse automated checks (401, 403, 429), swap Gmail for Slack or Telegram, or loop over several sites.",
-        "height": 1000,
+        "height": 860,
         "width": 560
       },
       "id": "6d151d9c-b80e-4e3e-b54f-be7bac282c27",
@@ -144,7 +144,7 @@
     {
       "parameters": {
         "content": "### 1. Configure\nYour site, how many pages to crawl, a cap on URLs checked (and on the price) and where to send the report.",
-        "height": 200,
+        "height": 170,
         "width": 440,
         "color": 7
       },
@@ -160,7 +160,7 @@
     {
       "parameters": {
         "content": "### 2. Check\nCrawls the site and checks every link and image. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
-        "height": 200,
+        "height": 170,
         "width": 220,
         "color": 7
       },
@@ -176,7 +176,7 @@
     {
       "parameters": {
         "content": "### 3. Report\nBroken links with the pages they are on. Nothing broken: no e-mail. Swap Gmail for Slack or Telegram if you like.",
-        "height": 200,
+        "height": 170,
         "width": 440,
         "color": 7
       },
