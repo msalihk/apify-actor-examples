@@ -1,12 +1,22 @@
 {
-  "name": "Get Google search volume and CPC for a keyword list in several countries using Apify",
+  "name": "Track monthly Google search volume for a keyword list in Google Sheets using Apify",
   "nodes": [
     {
-      "parameters": {},
-      "id": "3439552a-79f7-4663-a40a-6c041de07ffc",
-      "name": "When clicking 'Execute workflow'",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "triggerAtDayOfMonth": 1,
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "6e53b779-13f3-4ea0-8d09-93fcd95518b9",
+      "name": "First of the month",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
       "position": [
         0,
         0
@@ -17,33 +27,69 @@
         "assignments": {
           "assignments": [
             {
-              "id": "1b82d1c6-97e5-4df3-bd17-34be9c3076c9",
-              "name": "keywords",
-              "type": "array",
-              "value": "={{ [\"project management software\", \"crm software\", \"invoice software\"] }}"
-            },
-            {
-              "id": "c386875d-afff-44cd-81e7-11612dfd4a18",
+              "id": "bdf42ace-80f8-43b3-9139-5c725e660659",
               "name": "countries",
               "type": "array",
               "value": "={{ [\"US\", \"GB\", \"DE\"] }}"
             },
             {
-              "id": "4f3882bf-d646-4e5d-b255-e0f624b744af",
+              "id": "5c6586b7-6853-4e34-9d83-688483b2078b",
               "name": "historyMonths",
               "type": "number",
               "value": 12
+            },
+            {
+              "id": "8357094c-3569-4b3b-b8e7-0cade0adf496",
+              "name": "sendTo",
+              "type": "string",
+              "value": "you@example.com"
             }
           ]
         },
         "options": {}
       },
-      "id": "ef2d189a-88c5-405a-960c-1370a5aabd49",
+      "id": "d2fceee6-24b9-46bb-8a2b-8a18e0c044e6",
       "name": "Configure",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        240,
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Keywords"
+        },
+        "options": {}
+      },
+      "id": "f3acd2f1-69ca-4291-98fe-50e93cbb7d6b",
+      "name": "Read keywords",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One Actor run for the whole list (up to 10,000 keywords). Empty and duplicate cells are skipped.\nconst cfg = $('Configure').first().json;\nconst keywords = [...new Set($input.all().map(i => String(i.json.keyword ?? '').trim()).filter(Boolean))];\nreturn [{ json: { keywords, countries: cfg.countries, historyMonths: cfg.historyMonths } }];"
+      },
+      "id": "86946ee1-a4e6-4d65-84a8-3bd468187792",
+      "name": "Prepare Actor input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
         0
       ]
     },
@@ -60,94 +106,143 @@
           "timeout": 310000
         }
       },
-      "id": "060fc3ce-fca6-4ec6-bce2-5b22393013fb",
+      "id": "a8949a63-e88b-4bf4-823f-f1866ad922d8",
       "name": "Get search volume",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        480,
+        880,
         0
       ]
     },
     {
       "parameters": {
-        "jsCode": "// One clean row per keyword and country; notes about the input are skipped.\nreturn $input.all().filter(i => i.json.keyword && i.json.country).map(i => ({ json: {\n  keyword: i.json.keyword, country: i.json.country, volume: i.json.searchVolume, cpcUsd: i.json.cpcUsd,\n  competition: i.json.competition, trend: i.json.trendDirection, status: i.json.status } }));"
+        "jsCode": "// Flat rows for the History tab. Notes about the input (invalid keywords, limits) are skipped.\nconst checked = new Date().toISOString().slice(0, 10);\nreturn $input.all().filter(i => i.json.keyword && i.json.country).map(i => ({ json: {\n  checked, keyword: i.json.keyword, country: i.json.country, volume: i.json.searchVolume ?? '',\n  cpcUsd: i.json.cpcUsd ?? '', competition: i.json.competition ?? '', trend3mPct: i.json.trend3mPct ?? '',\n  trendYoYPct: i.json.trendYoYPct ?? '', trend: i.json.trendDirection ?? '', status: i.json.status } }));"
       },
-      "id": "0acdeed7-6c43-463a-88ca-506faabb7d5f",
+      "id": "1d7fa345-372a-49db-9c05-7381ff755eda",
       "name": "One row per keyword and country",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
+        1100,
         0
       ]
     },
     {
       "parameters": {
-        "content": "## Get Google search volume, CPC and trend for a keyword list in several countries\n\n**Who's it for:** SEO and PPC people, founders and content teams who compare markets or size a content plan and want one table: keyword × country × volume, CPC and trend.\n\n**How it works**\n1. **Configure** holds the keywords and the countries.\n2. **Get search volume** runs the Apify Actor *Keyword Search Volume*, which returns Google Ads figures: average monthly searches, CPC, competition, top-of-page bid range and month-by-month history, with the 3-month and year-on-year trend worked out.\n3. **One row per keyword and country** returns clean rows, ready for a Google Sheets \"Append row\" node.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Get search volume**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Edit **Configure** and run.\n\n**Requirements:** a paid Apify plan for more than one small lookup a day. $0.19 per lookup (up to 1,000 keywords in one country) plus $3 per 1,000 keywords that have data; keywords without data are free.\n\n**How to customize:** set `mode` to `ideas` to get related keywords, change `historyMonths` (12 to 48), or read the keyword list from a Google Sheet.",
-        "height": 760,
-        "width": 560
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "History"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
       },
-      "id": "c185274c-5f1f-45d7-983a-4f5f793c8300",
+      "id": "372cd67b-3e29-497a-a13f-611968eca1d7",
+      "name": "Append to history",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1340,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rising and falling keywords (3-month trend) and the biggest ones, as one plain-text e-mail.\nconst cfg = $('Configure').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r.volume !== '');\nconst line = r => `- ${r.keyword} (${r.country}): ${Number(r.volume).toLocaleString('en-US')}/mo, CPC $${r.cpcUsd || 0}, 3 months ${r.trend3mPct > 0 ? '+' : ''}${r.trend3mPct}%`;\nconst by = (f, n) => rows.filter(f).sort((a, b) => Math.abs(b.trend3mPct) - Math.abs(a.trend3mPct)).slice(0, n).map(line);\nconst rising = by(r => r.trend === 'rising', 10), falling = by(r => r.trend === 'falling', 10);\nconst top = [...rows].sort((a, b) => b.volume - a.volume).slice(0, 10).map(line);\nconst text = [`Keyword check ${rows[0]?.checked ?? ''}: ${rows.length} keyword/country rows with data.`, '',\n  'Rising:', ...(rising.length ? rising : ['- none']), '', 'Falling:', ...(falling.length ? falling : ['- none']), '',\n  'Biggest:', ...top, '', 'Full history is in the History tab of your sheet.'].join('\\n');\nreturn [{ json: { sendTo: cfg.sendTo, subject: `Keyword volumes: ${rising.length} rising, ${falling.length} falling`, text } }];"
+      },
+      "id": "9cbca966-6f84-4d15-996e-ea2f37d5c702",
+      "name": "Build summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.sendTo }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "dfba7ff0-6710-4dc0-9f0f-f9552e54c29e",
+      "name": "Email summary",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        140
+      ],
+      "webhookId": "4f82a30f-40f8-4504-b1e7-49c1bd7db23d"
+    },
+    {
+      "parameters": {
+        "content": "## Track Google search volume, CPC and trends for your keyword list every month\n\n**Who's it for:** SEO and PPC people, founders and content teams who keep a keyword list in Google Sheets and want a monthly history of search volume per country, plus a short e-mail about what is rising.\n\n**How it works**\n1. **First of the month** starts the workflow.\n2. **Read keywords** gets the list from the `Keywords` tab (column `keyword`).\n3. **Get search volume** runs the Apify Actor *Keyword Search Volume*: Google Ads average monthly searches, CPC, competition, top-of-page bid range and the 3-month and year-on-year trend, for every keyword in every country.\n4. **One row per keyword and country** adds the date of the check.\n5. **Append to history** writes the rows to the `History` tab, so the sheet grows into a month-by-month record.\n6. **Build summary** picks the rising and falling keywords and the biggest ones, and **Email summary** sends it with Gmail.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Get search volume**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Create a sheet with two tabs: `Keywords` (one column `keyword`) and `History` (empty). Connect Google Sheets in **Read keywords** and **Append to history** and pick that sheet.\n4. In **Configure**, set the countries (two-letter codes, up to 20) and your e-mail address. Connect Gmail in **Email summary**.\n\n**Requirements:** a paid Apify plan for more than one small lookup a day. $0.19 per lookup (up to 1,000 keywords in one country) plus $3 per 1,000 keywords that have data; keywords without data are free.\n\n**How to customize:** set `mode` to `both` in **Get search volume** to also get related keyword ideas, change `historyMonths` (12 to 48), or post the summary to Slack instead of e-mail.",
+        "height": 840,
+        "width": 620
+      },
+      "id": "db4c2b5d-97bc-4dff-b8f4-162687e87c5a",
       "name": "Template description",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -620,
+        -680,
         -260
       ]
     },
     {
       "parameters": {
-        "content": "### 1. Configure\nKeywords and two-letter country codes (up to 20 countries).",
-        "height": 180,
-        "width": 220,
+        "content": "### 1. Look up\nKeywords from the `Keywords` tab, countries from **Configure**. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 150,
+        "width": 1080,
         "color": 7
       },
-      "id": "1683261f-4195-4e04-99d9-f4d81895a188",
+      "id": "1ad8a168-8170-4e0a-b59a-5e72b01feed7",
       "name": "Step 1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        200,
-        -200
+        -40,
+        -260
       ]
     },
     {
       "parameters": {
-        "content": "### 2. Look up\nGoogle Ads figures for every keyword and country. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
-        "height": 180,
-        "width": 220,
+        "content": "### 2. Record and report\nRows appended to the `History` tab; rising, falling and biggest keywords by e-mail.",
+        "height": 150,
+        "width": 660,
         "color": 7
       },
-      "id": "f3600591-4b25-407b-87a2-953301b39a45",
+      "id": "5c5ffd64-e672-4bbc-adda-928fb7ffe93f",
       "name": "Step 2",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        440,
-        -200
-      ]
-    },
-    {
-      "parameters": {
-        "content": "### 3. Rows\nOne row per keyword and country. Connect Google Sheets here.",
-        "height": 180,
-        "width": 220,
-        "color": 7
-      },
-      "id": "274e61b0-4d5e-40ea-aca1-3c977019a51f",
-      "name": "Step 3",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [
-        680,
-        -200
+        1060,
+        -260
       ]
     }
   ],
   "connections": {
-    "When clicking 'Execute workflow'": {
+    "First of the month": {
       "main": [
         [
           {
@@ -159,6 +254,28 @@
       ]
     },
     "Configure": {
+      "main": [
+        [
+          {
+            "node": "Read keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read keywords": {
+      "main": [
+        [
+          {
+            "node": "Prepare Actor input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Actor input": {
       "main": [
         [
           {
@@ -174,6 +291,33 @@
         [
           {
             "node": "One row per keyword and country",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per keyword and country": {
+      "main": [
+        [
+          {
+            "node": "Append to history",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build summary": {
+      "main": [
+        [
+          {
+            "node": "Email summary",
             "type": "main",
             "index": 0
           }

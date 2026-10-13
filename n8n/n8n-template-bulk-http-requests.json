@@ -1,10 +1,10 @@
 {
-  "name": "Call an API for every row of a CSV in parallel with retries using Apify",
+  "name": "Enrich Google Sheets rows by calling an API for every row in parallel using Apify",
   "nodes": [
     {
       "parameters": {},
-      "id": "ace2db0b-2ab6-46f2-9f4c-f2def112fd27",
-      "name": "When clicking 'Execute workflow'",
+      "id": "0320788d-eed0-4282-a79a-717fcb843eb6",
+      "name": "Run enrichment",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
@@ -17,25 +17,25 @@
         "assignments": {
           "assignments": [
             {
-              "id": "379cabd6-b324-414c-928b-d98a9598777a",
+              "id": "405e9336-5d35-48a6-871f-a07bd371eeb8",
               "name": "urlTemplate",
               "type": "string",
               "value": "https://api.zippopotam.us/us/{{zip}}"
             },
             {
-              "id": "b52a583d-7956-4fd1-bdaa-77d626e61f6c",
-              "name": "csvRows",
-              "type": "string",
-              "value": "zip\n10001\n94103\n60601"
-            },
-            {
-              "id": "abd42dd5-9d9d-4ce2-951b-d9a2c6159cad",
+              "id": "1d89e086-7d35-442d-be63-4f1703fe0cbd",
               "name": "extract",
               "type": "object",
               "value": "={{ { \"city\": \"places[0].place name\", \"state\": \"places[0].state abbreviation\" } }}"
             },
             {
-              "id": "7ead45c7-580a-4b01-9ae1-3a7b21713efc",
+              "id": "e868108a-7000-4e01-9bdd-93c1ad69e401",
+              "name": "headers",
+              "type": "object",
+              "value": "={{ {} }}"
+            },
+            {
+              "id": "b51b6c14-7d69-487f-bcf9-ccd3336e7d48",
               "name": "concurrency",
               "type": "number",
               "value": 10
@@ -44,12 +44,48 @@
         },
         "options": {}
       },
-      "id": "890bdfe6-b0fc-406b-a3f1-6a141fec5974",
+      "id": "c8124a6a-7711-4801-abd8-8e6bc3cf97c1",
       "name": "Configure",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        240,
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "options": {}
+      },
+      "id": "3716eca0-d9ca-4d51-8f90-a2d748ad60e3",
+      "name": "Read rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// All rows in one Actor run. row_number is sent along so every result can be written back to its row.\nconst cfg = $('Configure').first().json;\nconst rows = $input.all().map(i => i.json);\nreturn [{ json: { url: cfg.urlTemplate, headers: cfg.headers, extract: cfg.extract, concurrency: cfg.concurrency, rows } }];"
+      },
+      "id": "1f575195-3530-4a95-b6ce-f222f6733485",
+      "name": "Prepare Actor input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
         0
       ]
     },
@@ -61,99 +97,133 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ url: $json.urlTemplate, method: 'GET', csv: $json.csvRows, extract: $json.extract, concurrency: $json.concurrency, maxRetries: 2 }) }}",
+        "jsonBody": "={{ JSON.stringify({ url: $json.url, method: 'GET', headers: $json.headers, rows: $json.rows, extract: $json.extract, concurrency: $json.concurrency, maxRetries: 2 }) }}",
         "options": {
           "timeout": 310000
         }
       },
-      "id": "b713585d-2474-4fb5-94fb-056f9d73e3f7",
-      "name": "Send all requests",
+      "id": "ff013d84-f1ce-4357-aefe-08feb8958f66",
+      "name": "Call API for every row",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        480,
+        880,
         0
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Row values plus extracted fields, status and error; the raw response body is dropped.\nreturn $input.all().map(i => { const { json, text, headers, row, ...r } = i.json; return { json: { ...row, ...r } }; });"
+        "jsCode": "// Keep the row number, the extracted fields and the status of each call.\nconst keys = Object.keys($('Configure').first().json.extract || {});\nreturn $input.all().filter(i => i.json.row?.row_number).map(i => {\n  const out = { row_number: i.json.row.row_number, statusCode: i.json.statusCode ?? '', error: i.json.error ?? '' };\n  for (const k of keys) out[k] = i.json[k] ?? '';\n  return { json: out };\n});"
       },
-      "id": "54392078-c4bf-436f-b85a-76c61ca4d90f",
-      "name": "One item per row",
+      "id": "14b98afe-6937-4aae-a676-efbfa27f4fb1",
+      "name": "Match results to rows",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
+        1100,
         0
       ]
     },
     {
       "parameters": {
-        "content": "## Call an API once for every row of a CSV, in parallel, with retries\n\n**Who's it for:** anyone who has a list (leads, ZIP codes, product IDs, URLs) and an API that takes one item at a time, and does not want a 10,000-iteration loop in n8n.\n\n**How it works**\n1. **Configure** holds a request template and the rows. `{{column}}` in the URL, headers or body is filled from each row.\n2. **Send all requests** runs the Apify Actor *Bulk HTTP Requests*: the requests go out in parallel with a per-host rate limit, failures (timeouts, 429, 5xx) are retried, and only the fields you list in `extract` are kept from each response.\n3. **One item per row** returns your row values plus the extracted fields, status and error, one n8n item per request, in a single execution.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Send all requests**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Edit **Configure** and run.\n\n**Requirements:** an Apify account. $1 per 1,000 requests; retries are not charged.\n\n**How to customize:** point `rowsUrl` at a published Google Sheet (CSV) instead of pasting rows, change the method to POST with a JSON `body` template, or raise `concurrency`.",
-        "height": 760,
-        "width": 560
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": []
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
       },
-      "id": "1a712766-f1f8-4c7f-ab37-d405edf51dd5",
+      "id": "2a6a0637-92f2-40ef-a8bb-3781f5b5474a",
+      "name": "Write results",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Enrich every row of a Google Sheet by calling an API, in parallel, with retries\n\n**Who's it for:** ops, growth and data people who have a sheet of leads, ZIP codes, domains or IDs and need one API call per row (geocoding, company lookup, validation, your own internal API) without loops, rate-limit errors or a timeout halfway through.\n\n**How it works**\n1. **Run enrichment** starts the workflow (swap it for a schedule if you like).\n2. **Configure** holds the URL template with `{{column}}` placeholders, the fields to keep from each response and the concurrency.\n3. **Read rows** gets every row of the sheet, with its row number.\n4. **Prepare Actor input** puts all rows into one request.\n5. **Call API for every row** runs the Apify Actor *Bulk HTTP Requests*: all calls in parallel, a per-host rate limit, retries on 429 and 5xx with Retry-After, and only the fields you asked for.\n6. **Match results to rows** keeps the row number and the new fields, plus `statusCode` and `error` for rows that failed.\n7. **Write results** updates each row in place. New columns are added automatically.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Call API for every row**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Connect Google Sheets in **Read rows** and **Write results** and pick your spreadsheet and tab in both. The example expects a column `zip` with US ZIP codes (format it as plain text so leading zeros stay).\n4. Edit **Configure** for your API: the URL template, `extract` (output column → path in the JSON response) and, if the API needs a key, `headers`.\n\n**Requirements:** an Apify account. $1 per 1,000 requests; retries are not charged.\n\n**How to customize:** send POST bodies with `{{column}}` templates, raise `concurrency` for fast APIs or lower it for strict ones, or read the rows from Airtable, Postgres or a CSV instead of Google Sheets.",
+        "height": 960,
+        "width": 620
+      },
+      "id": "a8d992b2-430b-4902-afb6-eb8492dd129b",
       "name": "Template description",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -620,
-        -260
+        -680,
+        -240
       ]
     },
     {
       "parameters": {
-        "content": "### 1. Configure\nURL template with `{{column}}` placeholders, the CSV rows, and which response fields to keep.",
-        "height": 180,
-        "width": 220,
+        "content": "### 1. Read\nYour API template in **Configure**, then every row of the sheet.",
+        "height": 150,
+        "width": 640,
         "color": 7
       },
-      "id": "225b8ad5-ddbf-4da4-bced-c67377237c53",
+      "id": "aa9929b1-2764-4639-9b53-53431f6ac0f5",
       "name": "Step 1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        200,
-        -200
+        -40,
+        -240
       ]
     },
     {
       "parameters": {
-        "content": "### 2. Send\nRuns all requests in parallel and waits. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
-        "height": 180,
-        "width": 220,
+        "content": "### 2. Call\nOne Actor run calls the API once per row, in parallel, with retries. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 150,
+        "width": 400,
         "color": 7
       },
-      "id": "4c9eda2d-3d18-4405-96ba-a69eedeb3766",
+      "id": "4740d3b0-9075-45f8-a4cb-81f774b9f7dc",
       "name": "Step 2",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        440,
-        -200
+        640,
+        -240
       ]
     },
     {
       "parameters": {
-        "content": "### 3. Results\nOne item per request: your row + extracted fields + `statusCode`, `ok`, `error`.",
-        "height": 180,
-        "width": 220,
+        "content": "### 3. Write back\nResults are matched by row number and written into the same rows.",
+        "height": 150,
+        "width": 400,
         "color": 7
       },
-      "id": "1bdddf02-ded8-4705-8d41-ea1ede46c999",
+      "id": "1fd0c0cd-3f0c-4616-9494-933817519971",
       "name": "Step 3",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        680,
-        -200
+        1060,
+        -240
       ]
     }
   ],
   "connections": {
-    "When clicking 'Execute workflow'": {
+    "Run enrichment": {
       "main": [
         [
           {
@@ -168,18 +238,51 @@
       "main": [
         [
           {
-            "node": "Send all requests",
+            "node": "Read rows",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Send all requests": {
+    "Read rows": {
       "main": [
         [
           {
-            "node": "One item per row",
+            "node": "Prepare Actor input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Actor input": {
+      "main": [
+        [
+          {
+            "node": "Call API for every row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call API for every row": {
+      "main": [
+        [
+          {
+            "node": "Match results to rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match results to rows": {
+      "main": [
+        [
+          {
+            "node": "Write results",
             "type": "main",
             "index": 0
           }
