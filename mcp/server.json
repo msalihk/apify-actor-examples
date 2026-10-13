@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.msalihk/saliga-apify-tools",
   "title": "Saliga data tools (Apify)",
-  "description": "Bulk API calls from CSV, PDF/Office to Markdown, OCR, Whisper transcription, video scenes, screenshots with change detection, sitemap URLs, broken links, tech stack and email provider, keyword volume, company job boards.",
+  "description": "Pay-per-result data tools: bulk API calls, docs to Markdown, OCR, Whisper, sitemaps, tech stack.",
   "version": "1.0.0",
   "websiteUrl": "https://github.com/msalihk/apify-actor-examples/tree/main/mcp",
   "remotes": [
@@ -10,7 +10,12 @@
       "type": "streamable-http",
       "url": "https://mcp.apify.com/?tools=saliga/bulk-http-requests,saliga/document-to-markdown,saliga/image-to-text-ocr,saliga/audio-to-text,saliga/video-to-scenes,saliga/website-screenshot-change-detection,saliga/sitemap-extractor,saliga/broken-link-checker,saliga/tech-stack-detector,saliga/keyword-search-volume,saliga/career-site-jobs",
       "headers": [
-        { "name": "Authorization", "description": "Bearer <your Apify API token> (or sign in with OAuth on first connection)", "isRequired": false, "isSecret": true }
+        {
+          "name": "Authorization",
+          "description": "Bearer <your Apify API token> (or sign in with OAuth on first connection)",
+          "isRequired": false,
+          "isSecret": true
+        }
       ]
     }
   ]
