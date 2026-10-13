@@ -32,6 +32,7 @@ curl -s -X POST "https://api.apify.com/v2/acts/saliga~<actor>/run-sync-get-datas
 | [uk-companies-house](https://apify.com/saliga/uk-companies-house) | `{"companyNumbers":["00445790"]}` | UK company profile | $2 / 1,000 companies |
 
 Folders:
+- `mcp/`: use these Actors as tools from Claude, Cursor or any MCP client, with one URL.
 - `curl/`: one shell script per Actor.
 - `python/`: the same with `apify-client` (`pip install apify-client`).
 - `node/`: the same with `apify-client` for JavaScript.
