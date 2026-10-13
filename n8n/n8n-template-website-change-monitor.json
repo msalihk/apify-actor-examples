@@ -1,0 +1,206 @@
+{
+  "name": "Monitor web pages weekly for visual changes with screenshots and diff images using Apify",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "ce0be604-ad58-40c1-b356-49e1f3fa3b89",
+      "name": "Every Monday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "64cac424-1da9-4e97-ac99-f4710751cff3",
+              "name": "pages",
+              "type": "array",
+              "value": "={{ [\"https://example.com\", \"https://www.wikipedia.org\"] }}"
+            },
+            {
+              "id": "df84687f-8874-4a69-97f2-e3c819245860",
+              "name": "devices",
+              "type": "array",
+              "value": "={{ [\"desktop\"] }}"
+            },
+            {
+              "id": "4c7afe92-0529-49a3-98b9-15ed2e3f1643",
+              "name": "monitorName",
+              "type": "string",
+              "value": "weekly-watch"
+            },
+            {
+              "id": "001fa4a0-c4d3-44ad-9de3-938fdbfb0417",
+              "name": "minChangePercent",
+              "type": "number",
+              "value": 0.5
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f6fd4a67-5c5a-46c6-a453-7f7666f4ec77",
+      "name": "Configure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/saliga~website-screenshot-change-detection/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ urls: $json.pages, devices: $json.devices, fullPage: true, detectChanges: true, monitorName: $json.monitorName, minChangePercent: $json.minChangePercent }) }}",
+        "options": {
+          "timeout": 310000
+        }
+      },
+      "id": "67f31758-41e7-4a9d-a6a3-9d73c1aafdd2",
+      "name": "Capture and compare",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pages that changed since the last run, with the screenshot and a diff image.\nreturn $input.all().filter(i => i.json.changed === true).map(i => ({ json: {\n  url: i.json.url, device: i.json.device, diffPercent: i.json.diffPercent, screenshot: i.json.imageUrl, diff: i.json.diffImageUrl } }));"
+      },
+      "id": "88ff495c-2dbf-4166-965b-d48d43f77577",
+      "name": "Only changed pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Get a weekly list of web pages that changed visually, with diff images\n\n**Who's it for:** marketers, founders and agencies who watch competitor pricing pages, landing pages or their own site, and want to know what changed without reading text diffs.\n\n**How it works**\n1. **Every Monday** starts the run on a schedule.\n2. **Configure** holds the pages to watch, the device and a monitor name.\n3. **Capture and compare** runs the Apify Actor *Website Screenshot + Change Detection*: full-page screenshots, cookie banners hidden, each one compared with the previous run's screenshot of the same page.\n4. **Only changed pages** keeps the pages whose changed area is above `minChangePercent`, with links to the screenshot and a diff image that highlights the change.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Capture and compare**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Edit **Configure** and run.\n\nThe first run saves the baseline; changes show up from the second run on.\n\n**Requirements:** an Apify account. $4 per 1,000 full-page screenshots, change detection included; failed pages are free.\n\n**How to customize:** connect **Only changed pages** to Slack, Gmail or Telegram, add `mobile` to the devices, or raise `minChangePercent` to ignore small changes such as rotating banners.",
+        "height": 760,
+        "width": 560
+      },
+      "id": "0dd4957e-225f-48b3-89ef-9d573ccc41b4",
+      "name": "Template description",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Configure\nPages to watch, devices and a monitor name. Keep the monitor name the same between runs.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "70587313-4cb2-4cf9-ae0a-ff042b089d1d",
+      "name": "Step 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Capture\nFull-page screenshots compared with last week's. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "757e4cc6-c911-4d2b-b0b6-5000147abcfe",
+      "name": "Step 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Changes\nOnly pages that changed. Connect Slack, Gmail or Telegram here.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "0ebe23d1-9fef-497b-b4fe-17c1b2471848",
+      "name": "Step 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        680,
+        -200
+      ]
+    }
+  ],
+  "connections": {
+    "Every Monday": {
+      "main": [
+        [
+          {
+            "node": "Configure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure": {
+      "main": [
+        [
+          {
+            "node": "Capture and compare",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture and compare": {
+      "main": [
+        [
+          {
+            "node": "Only changed pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

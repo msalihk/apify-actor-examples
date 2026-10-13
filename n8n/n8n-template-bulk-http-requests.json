@@ -1,0 +1,194 @@
+{
+  "name": "Call an API for every row of a CSV in parallel with retries using Apify",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ace2db0b-2ab6-46f2-9f4c-f2def112fd27",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "379cabd6-b324-414c-928b-d98a9598777a",
+              "name": "urlTemplate",
+              "type": "string",
+              "value": "https://api.zippopotam.us/us/{{zip}}"
+            },
+            {
+              "id": "b52a583d-7956-4fd1-bdaa-77d626e61f6c",
+              "name": "csvRows",
+              "type": "string",
+              "value": "zip\n10001\n94103\n60601"
+            },
+            {
+              "id": "abd42dd5-9d9d-4ce2-951b-d9a2c6159cad",
+              "name": "extract",
+              "type": "object",
+              "value": "={{ { \"city\": \"places[0].place name\", \"state\": \"places[0].state abbreviation\" } }}"
+            },
+            {
+              "id": "7ead45c7-580a-4b01-9ae1-3a7b21713efc",
+              "name": "concurrency",
+              "type": "number",
+              "value": 10
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "890bdfe6-b0fc-406b-a3f1-6a141fec5974",
+      "name": "Configure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/saliga~bulk-http-requests/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $json.urlTemplate, method: 'GET', csv: $json.csvRows, extract: $json.extract, concurrency: $json.concurrency, maxRetries: 2 }) }}",
+        "options": {
+          "timeout": 310000
+        }
+      },
+      "id": "b713585d-2474-4fb5-94fb-056f9d73e3f7",
+      "name": "Send all requests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Row values plus extracted fields, status and error; the raw response body is dropped.\nreturn $input.all().map(i => { const { json, text, headers, row, ...r } = i.json; return { json: { ...row, ...r } }; });"
+      },
+      "id": "54392078-c4bf-436f-b85a-76c61ca4d90f",
+      "name": "One item per row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Call an API once for every row of a CSV, in parallel, with retries\n\n**Who's it for:** anyone who has a list (leads, ZIP codes, product IDs, URLs) and an API that takes one item at a time, and does not want a 10,000-iteration loop in n8n.\n\n**How it works**\n1. **Configure** holds a request template and the rows. `{{column}}` in the URL, headers or body is filled from each row.\n2. **Send all requests** runs the Apify Actor *Bulk HTTP Requests*: the requests go out in parallel with a per-host rate limit, failures (timeouts, 429, 5xx) are retried, and only the fields you list in `extract` are kept from each response.\n3. **One item per row** returns your row values plus the extracted fields, status and error, one n8n item per request, in a single execution.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Send all requests**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Edit **Configure** and run.\n\n**Requirements:** an Apify account. $1 per 1,000 requests; retries are not charged.\n\n**How to customize:** point `rowsUrl` at a published Google Sheet (CSV) instead of pasting rows, change the method to POST with a JSON `body` template, or raise `concurrency`.",
+        "height": 760,
+        "width": 560
+      },
+      "id": "1a712766-f1f8-4c7f-ab37-d405edf51dd5",
+      "name": "Template description",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Configure\nURL template with `{{column}}` placeholders, the CSV rows, and which response fields to keep.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "225b8ad5-ddbf-4da4-bced-c67377237c53",
+      "name": "Step 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Send\nRuns all requests in parallel and waits. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "4c9eda2d-3d18-4405-96ba-a69eedeb3766",
+      "name": "Step 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Results\nOne item per request: your row + extracted fields + `statusCode`, `ok`, `error`.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "1bdddf02-ded8-4705-8d41-ea1ede46c999",
+      "name": "Step 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        680,
+        -200
+      ]
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Configure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure": {
+      "main": [
+        [
+          {
+            "node": "Send all requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send all requests": {
+      "main": [
+        [
+          {
+            "node": "One item per row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

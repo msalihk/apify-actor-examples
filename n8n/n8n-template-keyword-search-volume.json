@@ -1,0 +1,188 @@
+{
+  "name": "Get Google search volume and CPC for a keyword list in several countries using Apify",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "3439552a-79f7-4663-a40a-6c041de07ffc",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1b82d1c6-97e5-4df3-bd17-34be9c3076c9",
+              "name": "keywords",
+              "type": "array",
+              "value": "={{ [\"project management software\", \"crm software\", \"invoice software\"] }}"
+            },
+            {
+              "id": "c386875d-afff-44cd-81e7-11612dfd4a18",
+              "name": "countries",
+              "type": "array",
+              "value": "={{ [\"US\", \"GB\", \"DE\"] }}"
+            },
+            {
+              "id": "4f3882bf-d646-4e5d-b255-e0f624b744af",
+              "name": "historyMonths",
+              "type": "number",
+              "value": 12
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ef2d189a-88c5-405a-960c-1370a5aabd49",
+      "name": "Configure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/saliga~keyword-search-volume/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ keywords: $json.keywords, countries: $json.countries, mode: 'volume', historyMonths: $json.historyMonths }) }}",
+        "options": {
+          "timeout": 310000
+        }
+      },
+      "id": "060fc3ce-fca6-4ec6-bce2-5b22393013fb",
+      "name": "Get search volume",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One clean row per keyword and country; notes about the input are skipped.\nreturn $input.all().filter(i => i.json.keyword && i.json.country).map(i => ({ json: {\n  keyword: i.json.keyword, country: i.json.country, volume: i.json.searchVolume, cpcUsd: i.json.cpcUsd,\n  competition: i.json.competition, trend: i.json.trendDirection, status: i.json.status } }));"
+      },
+      "id": "0acdeed7-6c43-463a-88ca-506faabb7d5f",
+      "name": "One row per keyword and country",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Get Google search volume, CPC and trend for a keyword list in several countries\n\n**Who's it for:** SEO and PPC people, founders and content teams who compare markets or size a content plan and want one table: keyword × country × volume, CPC and trend.\n\n**How it works**\n1. **Configure** holds the keywords and the countries.\n2. **Get search volume** runs the Apify Actor *Keyword Search Volume*, which returns Google Ads figures: average monthly searches, CPC, competition, top-of-page bid range and month-by-month history, with the 3-month and year-on-year trend worked out.\n3. **One row per keyword and country** returns clean rows, ready for a Google Sheets \"Append row\" node.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Get search volume**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Edit **Configure** and run.\n\n**Requirements:** a paid Apify plan for more than one small lookup a day. $0.19 per lookup (up to 1,000 keywords in one country) plus $3 per 1,000 keywords that have data; keywords without data are free.\n\n**How to customize:** set `mode` to `ideas` to get related keywords, change `historyMonths` (12 to 48), or read the keyword list from a Google Sheet.",
+        "height": 760,
+        "width": 560
+      },
+      "id": "c185274c-5f1f-45d7-983a-4f5f793c8300",
+      "name": "Template description",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Configure\nKeywords and two-letter country codes (up to 20 countries).",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "1683261f-4195-4e04-99d9-f4d81895a188",
+      "name": "Step 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Look up\nGoogle Ads figures for every keyword and country. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "f3600591-4b25-407b-87a2-953301b39a45",
+      "name": "Step 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Rows\nOne row per keyword and country. Connect Google Sheets here.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "274e61b0-4d5e-40ea-aca1-3c977019a51f",
+      "name": "Step 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        680,
+        -200
+      ]
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Configure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure": {
+      "main": [
+        [
+          {
+            "node": "Get search volume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get search volume": {
+      "main": [
+        [
+          {
+            "node": "One row per keyword and country",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

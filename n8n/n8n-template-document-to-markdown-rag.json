@@ -1,0 +1,188 @@
+{
+  "name": "Convert PDFs and Office files into RAG-ready Markdown chunks with Apify",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "254692b9-a6d7-4d76-9e5e-06a8868a9115",
+      "name": "When clicking 'Execute workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00128c54-7571-4c5d-81ec-40dd829b1665",
+              "name": "fileUrls",
+              "type": "array",
+              "value": "={{ [\"https://raw.githubusercontent.com/microsoft/markitdown/main/packages/markitdown/tests/test_files/test.pdf\", \"https://raw.githubusercontent.com/microsoft/markitdown/main/packages/markitdown/tests/test_files/test.docx\"] }}"
+            },
+            {
+              "id": "9fb2e1f4-d8c2-45a6-986b-d2ddf40d198f",
+              "name": "chunkSize",
+              "type": "number",
+              "value": 1500
+            },
+            {
+              "id": "5ec2d915-fda8-4325-9e11-ff25c51732a7",
+              "name": "chunkOverlap",
+              "type": "number",
+              "value": 200
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f4378565-b316-4ae4-937c-116e0ebc3bba",
+      "name": "Configure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/saliga~document-to-markdown/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ urls: $json.fileUrls, chunkSize: $json.chunkSize, chunkOverlap: $json.chunkOverlap, extractTables: true }) }}",
+        "options": {
+          "timeout": 310000
+        }
+      },
+      "id": "6066b0e6-3fec-43ce-b254-4940e2646fd0",
+      "name": "Convert files to Markdown",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One n8n item per RAG chunk, with the metadata you need for citations.\nconst out = [];\nfor (const doc of $input.all()) {\n  if (doc.json.error) continue; // a file that failed (not found, too large...) is reported by the Actor and skipped here\n  for (const c of doc.json.chunks ?? []) {\n    out.push({ json: { text: c.text, source: doc.json.url, title: doc.json.title ?? doc.json.fileName,\n      pageStart: c.pageStart, pageEnd: c.pageEnd, heading: c.heading, chunk: c.index } });\n  }\n}\nreturn out;"
+      },
+      "id": "7346a1a4-c617-4b07-94a1-181cf26e417b",
+      "name": "One item per chunk",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Convert PDFs and Office files into RAG-ready Markdown chunks\n\n**Who's it for:** anyone building a RAG pipeline or an AI agent that has to read PDFs, Word, PowerPoint or Excel files, and who needs the tables to survive the conversion.\n\n**How it works**\n1. **Configure** holds the file URLs and the chunk size.\n2. **Convert files to Markdown** calls the Apify Actor *Document to Markdown* through the Apify API and waits for the result. PDF tables (with or without lines) come back as Markdown tables, scanned pages go through OCR, and each file is split into chunks with page numbers and the nearest heading.\n3. **One item per chunk** turns every chunk into its own n8n item with `text`, `source`, `pageStart`, `pageEnd` and `heading`, ready for an embeddings node and a vector store.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Convert files to Markdown**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Put your own file URLs in **Configure** and run.\n\n**Requirements:** an Apify account. The Actor costs $2 per 1,000 pages ($5 per 1,000 OCR pages); there is no per-run file limit on the free plan.\n\n**How to customize:** change `chunkSize` / `chunkOverlap`, or connect the last node to Pinecone, Qdrant, Supabase or any vector store. Keep `source` and `pageStart` as metadata so answers can cite the page.",
+        "height": 760,
+        "width": 560
+      },
+      "id": "c36a67cb-7d97-4c32-830a-ee1be3a123d7",
+      "name": "Template description",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Configure\nYour file URLs (any public link or pre-signed S3/GCS URL) and the chunk size in characters.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "b94375ce-76d3-4013-953f-e660c017b012",
+      "name": "Step 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Convert\nRuns the Actor and waits (up to 5 min). Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "2ec28a23-bd7c-4b2c-bb10-ac1b99bf7380",
+      "name": "Step 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Chunks\nOne item per chunk with `text`, `source`, `pageStart`, `heading`. Connect your embeddings + vector store here.",
+        "height": 180,
+        "width": 220,
+        "color": 7
+      },
+      "id": "d8bd3911-6ba2-4d3d-9ee8-2ec370462178",
+      "name": "Step 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        680,
+        -200
+      ]
+    }
+  ],
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Configure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure": {
+      "main": [
+        [
+          {
+            "node": "Convert files to Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert files to Markdown": {
+      "main": [
+        [
+          {
+            "node": "One item per chunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
