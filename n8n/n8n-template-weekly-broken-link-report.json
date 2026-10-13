@@ -1,0 +1,243 @@
+{
+  "name": "Email a weekly broken link report for your website with Apify and Gmail",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "bd210e7f-c910-4c81-ad90-83c1557f0c71",
+      "name": "Every Monday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "78e05366-40a1-4494-b15d-9f19e42ea788",
+              "name": "siteUrl",
+              "type": "string",
+              "value": "https://example.com/"
+            },
+            {
+              "id": "e3686e7c-ede3-4453-ad5c-0e405c54a9a9",
+              "name": "maxPages",
+              "type": "number",
+              "value": 200
+            },
+            {
+              "id": "1067171a-a7af-4153-a76a-2341d635e7bb",
+              "name": "maxLinksToCheck",
+              "type": "number",
+              "value": 3000
+            },
+            {
+              "id": "4431e38f-1dc5-4922-afc1-85a806a3e55b",
+              "name": "includeWarnings",
+              "type": "boolean",
+              "value": false
+            },
+            {
+              "id": "9f5948c8-7832-4ee1-b67a-f62def59e1a1",
+              "name": "sendTo",
+              "type": "string",
+              "value": "you@example.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5a653d63-d06c-4649-9143-e5f9ebe5d7de",
+      "name": "Configure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/saliga~broken-link-checker/run-sync-get-dataset-items?timeout=280",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ startUrls: [{ url: $json.siteUrl }], maxPagesToCrawl: $json.maxPages, maxLinksToCheck: $json.maxLinksToCheck, checkExternalLinks: true, checkImages: true, maxSourcesPerLink: 3 }) }}",
+        "options": {
+          "timeout": 310000
+        }
+      },
+      "id": "0e1d4287-9ad3-4f8c-afe4-122e970d2010",
+      "name": "Check links",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keep broken links (and warnings if asked) and write one plain-text e-mail. No problems: no e-mail.\nconst cfg = $('Configure').first().json;\nconst keep = cfg.includeWarnings ? ['error', 'warning'] : ['error'];\nconst rows = $input.all().map(i => i.json).filter(r => keep.includes(r.severity));\nif (!rows.length) return [];\nconst lines = rows.slice(0, 100).map(r => {\n  const where = (r.foundOn || []).map(s => `    on ${s.page}${s.text ? ` (\"${s.text}\")` : ''}`).join('\\n');\n  return `- ${r.url}\\n  ${r.status ?? ''} ${r.problem || ''} · ${r.linkType} ${r.kind || 'link'} · on ${r.foundOnCount || 1} page(s)\\n${where}`;\n});\nconst more = rows.length > 100 ? `\\n...and ${rows.length - 100} more. Open the run in Apify Console for the full list.` : '';\nreturn [{ json: {\n  sendTo: cfg.sendTo,\n  subject: `${rows.length} ${cfg.includeWarnings ? 'link problem(s)' : 'broken link(s)'} on ${new URL(cfg.siteUrl).hostname}`,\n  text: `Weekly link check for ${cfg.siteUrl}\\n\\n${lines.join('\\n\\n')}${more}\\n`,\n} }];"
+      },
+      "id": "9b3dfde6-3596-4b9a-a310-891c70b442ea",
+      "name": "Build report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.sendTo }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "61fc26d5-05f1-4ac8-ac2c-bb36e1241687",
+      "name": "Email report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        0
+      ],
+      "webhookId": "5acc4c4b-7351-4080-b22d-eb0dc80a31b3"
+    },
+    {
+      "parameters": {
+        "content": "## Email yourself a weekly broken link report for your website\n\n**Who's it for:** site owners, SEO people and agencies who want to hear about 404s, dead external links and broken images before visitors and Google do, without installing a crawler.\n\n**How it works**\n1. **Every Monday** starts the workflow (change the schedule as you like).\n2. **Check links** runs the Apify Actor *Broken Link Checker*. It crawls your site from the start URL, checks every link and image it finds (internal and external) and returns each problem with the pages it is on and its link text.\n3. **Build report** keeps the broken links (404, 410, 5xx, dead domains, timeouts) and writes a plain-text e-mail. If nothing is broken, the workflow stops and no e-mail is sent.\n4. **Email report** sends it with Gmail.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Check links**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **Configure**, set your site, the page limit and the e-mail address.\n4. Connect your Gmail credential in **Email report** and run once to test.\n\n**Requirements:** an Apify account. $0.50 per 1,000 URLs checked; `maxLinksToCheck` caps the price of each run. The run is capped at about 4 minutes so it fits n8n's wait, which covers a site of a few hundred pages.\n\n**How to customize:** set `includeWarnings` to `true` to also list links that refuse automated checks (401, 403, 429), swap Gmail for Slack or Telegram, or loop over several sites.",
+        "height": 1000,
+        "width": 560
+      },
+      "id": "6d151d9c-b80e-4e3e-b54f-be7bac282c27",
+      "name": "Template description",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Configure\nYour site, how many pages to crawl, a cap on URLs checked (and on the price) and where to send the report.",
+        "height": 200,
+        "width": 440,
+        "color": 7
+      },
+      "id": "a1e85043-c664-41a0-881a-0ed876c17e9f",
+      "name": "Step 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Check\nCrawls the site and checks every link and image. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 200,
+        "width": 220,
+        "color": 7
+      },
+      "id": "01115a47-1cf9-4ff5-a7f9-8afb3e22eb97",
+      "name": "Step 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Report\nBroken links with the pages they are on. Nothing broken: no e-mail. Swap Gmail for Slack or Telegram if you like.",
+        "height": 200,
+        "width": 440,
+        "color": 7
+      },
+      "id": "1db0ba1a-26dc-4272-9d69-fdee66823158",
+      "name": "Step 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        680,
+        -260
+      ]
+    }
+  ],
+  "connections": {
+    "Every Monday": {
+      "main": [
+        [
+          {
+            "node": "Configure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure": {
+      "main": [
+        [
+          {
+            "node": "Check links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check links": {
+      "main": [
+        [
+          {
+            "node": "Build report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build report": {
+      "main": [
+        [
+          {
+            "node": "Email report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

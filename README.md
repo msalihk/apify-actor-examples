@@ -37,6 +37,13 @@ Folders:
 - `python/`: the same with `apify-client` (`pip install apify-client`).
 - `node/`: the same with `apify-client` for JavaScript.
 - `n8n/`: importable n8n workflows (HTTP Request node, no community node needed).
+  - `n8n-template-bulk-http-requests.json`: call an API for every row of a CSV
+  - `n8n-template-document-to-markdown-rag.json`: PDFs and Office files to RAG-ready Markdown chunks
+  - `n8n-template-keyword-search-volume.json`: search volume and CPC for a keyword list in several countries
+  - `n8n-template-website-change-monitor.json`: weekly visual change check with diff images
+  - `n8n-template-weekly-broken-link-report.json`: weekly broken link report by e-mail (Gmail)
+
+  Import: n8n → Workflows → ⋯ → Import from File. Then add a *Header Auth* credential (`Authorization` = `Bearer YOUR_APIFY_TOKEN`) in the HTTP Request node.
 
 Prices are the Store prices when this was written; the Actor page is the source of truth.
 
