@@ -30,6 +30,9 @@ curl -s -X POST "https://api.apify.com/v2/acts/saliga~<actor>/run-sync-get-datas
 | [audio-to-text](https://apify.com/saliga/audio-to-text) | `{"urls":["https://example.com/episode.mp3"]}` | Transcript, SRT, chunks | $8 / 1,000 minutes |
 | [video-to-scenes](https://apify.com/saliga/video-to-scenes) | `{"videoUrls":["https://media.w3.org/2010/05/sintel/trailer.mp4"]}` | Scene cuts, keyframes | $2 / 1,000 frames |
 | [uk-companies-house](https://apify.com/saliga/uk-companies-house) | `{"companyNumbers":["00445790"]}` | UK company profile | $2 / 1,000 companies |
+| [bulk-file-downloader](https://apify.com/saliga/bulk-file-downloader) | `{"urls":["https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"]}` | Stored file, public link, sha256, ZIP | $1 / 1,000 files |
+| [dataset-merge-dedupe](https://apify.com/saliga/dataset-merge-dedupe) | `{"datasetIds":["<id1>","<id2>"],"dedupeFields":["url"],"exportFormats":["csv"]}` | One merged, de-duplicated table + CSV/Excel | $0.50 / 1,000 rows |
+| [academic-paper-search](https://apify.com/saliga/academic-paper-search) | `{"queries":["retrieval augmented generation"],"sources":["openalex","arxiv"]}` | Papers with DOI, citations, PDF link | $3 / 1,000 papers |
 
 Folders:
 - `mcp/`: use these Actors as tools from Claude, Cursor or any MCP client, with one URL.

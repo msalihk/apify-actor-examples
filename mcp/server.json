@@ -2,13 +2,13 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.msalihk/saliga-apify-tools",
   "title": "Saliga data tools (Apify)",
-  "description": "Pay-per-result data tools: bulk API calls, docs to Markdown, OCR, Whisper, sitemaps, tech stack.",
-  "version": "1.0.1",
+  "description": "Pay-per-result data tools: bulk APIs, docs to Markdown, OCR, files, datasets, papers, tech stack.",
+  "version": "1.0.2",
   "websiteUrl": "https://github.com/msalihk/apify-actor-examples/tree/main/mcp",
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.apify.com/?tools=saliga/bulk-http-requests,saliga/document-to-markdown,saliga/image-to-text-ocr,saliga/audio-to-text,saliga/video-to-scenes,saliga/website-screenshot-change-detection,saliga/sitemap-extractor,saliga/broken-link-checker,saliga/tech-stack-detector,saliga/keyword-search-volume,saliga/career-site-jobs,saliga/uk-companies-house",
+      "url": "https://mcp.apify.com/?tools=saliga/bulk-http-requests,saliga/document-to-markdown,saliga/image-to-text-ocr,saliga/audio-to-text,saliga/video-to-scenes,saliga/website-screenshot-change-detection,saliga/sitemap-extractor,saliga/broken-link-checker,saliga/tech-stack-detector,saliga/keyword-search-volume,saliga/career-site-jobs,saliga/uk-companies-house,saliga/bulk-file-downloader,saliga/dataset-merge-dedupe,saliga/academic-paper-search",
       "headers": [
         {
           "name": "Authorization",

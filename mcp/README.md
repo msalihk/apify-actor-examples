@@ -3,7 +3,7 @@
 Apify hosts an MCP server that exposes any Store Actor as a tool. This URL gives an agent (Claude, Cursor, VS Code, n8n AI Agent…) the saliga toolkit only:
 
 ```
-https://mcp.apify.com/?tools=saliga/bulk-http-requests,saliga/document-to-markdown,saliga/image-to-text-ocr,saliga/audio-to-text,saliga/video-to-scenes,saliga/website-screenshot-change-detection,saliga/sitemap-extractor,saliga/broken-link-checker,saliga/tech-stack-detector,saliga/keyword-search-volume,saliga/career-site-jobs,saliga/uk-companies-house
+https://mcp.apify.com/?tools=saliga/bulk-http-requests,saliga/document-to-markdown,saliga/image-to-text-ocr,saliga/audio-to-text,saliga/video-to-scenes,saliga/website-screenshot-change-detection,saliga/sitemap-extractor,saliga/broken-link-checker,saliga/tech-stack-detector,saliga/keyword-search-volume,saliga/career-site-jobs,saliga/uk-companies-house,saliga/bulk-file-downloader,saliga/dataset-merge-dedupe,saliga/academic-paper-search
 ```
 
 You need a free Apify account. The first connection opens a browser to sign in (OAuth), or send your Apify API token as `Authorization: Bearer <token>`. Each tool call is a normal Actor run, priced per result as on the Actor page.
@@ -24,6 +24,9 @@ You need a free Apify account. The first connection opens a browser to sign in (
 | "Search volume and CPC for these keywords in the US and Germany" | keyword-search-volume |
 | "Which of these companies are hiring engineers right now?" | career-site-jobs |
 | "Find UK companies incorporated last week with SIC code 62020" | uk-companies-house |
+| "Download every PDF linked from these pages and give me a ZIP" | bulk-file-downloader |
+| "Merge these three scraper datasets, remove duplicate domains and give me an Excel file" | dataset-merge-dedupe |
+| "Find 2024 papers on retrieval augmented generation with open access PDFs" | academic-paper-search |
 
 ## Claude Desktop / Claude Code
 
@@ -32,7 +35,7 @@ You need a free Apify account. The first connection opens a browser to sign in (
   "mcpServers": {
     "saliga-tools": {
       "type": "http",
-      "url": "https://mcp.apify.com/?tools=saliga/bulk-http-requests,saliga/document-to-markdown,saliga/image-to-text-ocr,saliga/audio-to-text,saliga/video-to-scenes,saliga/website-screenshot-change-detection,saliga/sitemap-extractor,saliga/broken-link-checker,saliga/tech-stack-detector,saliga/keyword-search-volume,saliga/career-site-jobs,saliga/uk-companies-house"
+      "url": "https://mcp.apify.com/?tools=saliga/bulk-http-requests,saliga/document-to-markdown,saliga/image-to-text-ocr,saliga/audio-to-text,saliga/video-to-scenes,saliga/website-screenshot-change-detection,saliga/sitemap-extractor,saliga/broken-link-checker,saliga/tech-stack-detector,saliga/keyword-search-volume,saliga/career-site-jobs,saliga/uk-companies-house,saliga/bulk-file-downloader,saliga/dataset-merge-dedupe,saliga/academic-paper-search"
     }
   }
 }
@@ -44,7 +47,7 @@ You need a free Apify account. The first connection opens a browser to sign in (
 {
   "mcpServers": {
     "saliga-tools": {
-      "url": "https://mcp.apify.com/?tools=saliga/bulk-http-requests,saliga/document-to-markdown,saliga/image-to-text-ocr,saliga/audio-to-text,saliga/video-to-scenes,saliga/website-screenshot-change-detection,saliga/sitemap-extractor,saliga/broken-link-checker,saliga/tech-stack-detector,saliga/keyword-search-volume,saliga/career-site-jobs,saliga/uk-companies-house",
+      "url": "https://mcp.apify.com/?tools=saliga/bulk-http-requests,saliga/document-to-markdown,saliga/image-to-text-ocr,saliga/audio-to-text,saliga/video-to-scenes,saliga/website-screenshot-change-detection,saliga/sitemap-extractor,saliga/broken-link-checker,saliga/tech-stack-detector,saliga/keyword-search-volume,saliga/career-site-jobs,saliga/uk-companies-house,saliga/bulk-file-downloader,saliga/dataset-merge-dedupe,saliga/academic-paper-search",
       "headers": { "Authorization": "Bearer ${APIFY_TOKEN}" }
     }
   }
