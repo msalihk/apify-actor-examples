@@ -81,6 +81,45 @@ const EXAMPLES = {
             "00445790",
             "SC095000"
         ]
+    },
+    "bulk-file-downloader": {
+        "urls": [
+            "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            "https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg"
+        ]
+    },
+    "dataset-merge-dedupe": {
+        "rows": [
+            {
+                "company": "Acme",
+                "website": "https://www.acme.example/?utm_source=x"
+            },
+            {
+                "company": "ACME GmbH",
+                "website": "acme.example"
+            },
+            {
+                "company": "Bluefin",
+                "website": "https://bluefin.example"
+            }
+        ],
+        "normalizeUrlFields": [
+            "website"
+        ],
+        "extractDomainFrom": "website",
+        "dedupeFields": [
+            "domain"
+        ]
+    },
+    "academic-paper-search": {
+        "queries": [
+            "retrieval augmented generation"
+        ],
+        "sources": [
+            "openalex",
+            "arxiv"
+        ],
+        "maxResultsPerQuery": 20
     }
 };
 
