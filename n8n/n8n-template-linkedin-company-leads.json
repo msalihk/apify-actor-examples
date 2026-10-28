@@ -1,10 +1,10 @@
 {
-  "name": "Build a LinkedIn company lead list in Google Sheets from a form with Apify",
+  "name": "Build a de-duplicated LinkedIn company lead list in Google Sheets from a form with Apify",
   "nodes": [
     {
       "parameters": {
         "formTitle": "Find companies on LinkedIn",
-        "formDescription": "Describe the companies you want. Results are added to your Google Sheet in a few minutes.",
+        "formDescription": "Describe the companies you want. New matches are added to the Google Sheet and you get an e-mail in a few minutes.",
         "formFields": {
           "values": [
             {
@@ -61,18 +61,24 @@
               "fieldLabel": "How many companies",
               "fieldType": "number",
               "placeholder": "25"
+            },
+            {
+              "fieldLabel": "Send results to",
+              "fieldType": "email",
+              "placeholder": "you@example.com",
+              "requiredField": true
             }
           ]
         },
         "options": {
           "respondWithOptions": {
             "values": {
-              "formSubmittedText": "Searching. Matching companies will appear in your Google Sheet in a few minutes."
+              "formSubmittedText": "Searching. New companies will be in the Google Sheet and in your inbox in a few minutes."
             }
           }
         }
       },
-      "id": "f196c6a8-7573-46bc-8f96-3b6f71155965",
+      "id": "af3b91c0-7499-4fa2-a44f-3ec26b78ba63",
       "name": "Describe the companies",
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.2,
@@ -94,25 +100,64 @@
           "timeout": 310000
         }
       },
-      "id": "c0d1c599-1db1-47bf-b56d-27c21734c529",
+      "id": "c1c057a0-47d8-4ed5-822a-b49f2a65e932",
       "name": "Find companies",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        260,
+        220,
         0
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Flatten each company into the columns a CRM needs.\nreturn $input.all().map(i => i.json).filter(c => c.name).map(c => ({ json: {\n  company: c.name,\n  website: c.website || '',\n  domain: c.domain || '',\n  linkedin: c.url,\n  industry: c.industry || '',\n  size: c.companySize || '',\n  employees_on_linkedin: c.employeesOnLinkedIn ?? '',\n  followers: c.followers ?? '',\n  headquarters: c.headquarters || '',\n  country: (c.address || {}).country || '',\n  founded: c.foundedYear ?? '',\n  specialties: (c.specialties || []).join(', '),\n  found_via: c.foundVia || '',\n  added: new Date().toISOString().slice(0, 10),\n} }));"
+        "jsCode": "// CRM columns plus a 0-100 fit score. Rows with no name (pages that could not be read) are dropped.\nconst form = $('Describe the companies').first().json;\nconst wanted = [].concat(form['Company sizes'] || []);\nconst today = new Date().toISOString().slice(0, 10);\nreturn $input.all().map(i => i.json).filter(c => c.name).map(c => {\n  let score = 40;\n  if (!wanted.length || wanted.some(s => (c.companySize || '').startsWith(s))) score += 20;\n  if ((c.foundVia || '').startsWith('hiring')) score += 20;\n  if ((c.followers || 0) >= 1000) score += 10;\n  if (c.website) score += 10;\n  return { json: {\n    fit_score: Math.min(score, 100),\n    company: c.name,\n    website: c.website || '',\n    domain: c.domain || '',\n    linkedin: c.url,\n    industry: c.industry || '',\n    size: c.companySize || '',\n    employees_on_linkedin: c.employeesOnLinkedIn ?? '',\n    followers: c.followers ?? '',\n    headquarters: c.headquarters || '',\n    country: (c.address || {}).country || '',\n    founded: c.foundedYear ?? '',\n    specialties: (c.specialties || []).slice(0, 8).join(', '),\n    found_via: c.foundVia || '',\n    search: form['Keywords'] || '',\n    added: today,\n  } };\n});"
       },
-      "id": "325da112-6588-4f28-8948-5812b4f41e3a",
-      "name": "One row per company",
+      "id": "9210e260-0151-467b-b436-c90b0c30ed31",
+      "name": "Score and flatten",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        520,
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Companies"
+        },
+        "options": {}
+      },
+      "id": "c7aeb8f6-cd86-4c9f-a0a6-0d5902f1ff6e",
+      "name": "Read existing companies",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        0
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Drop companies already in the sheet (same LinkedIn page or same domain), best fit first.\nconst norm = u => String(u || '').toLowerCase().replace(/^https?:\\/\\/(www\\.)?/, '').replace(/\\/+$/, '');\nconst existing = $input.all().map(i => i.json);\nconst seenLinks = new Set(existing.map(r => norm(r.linkedin)).filter(Boolean));\nconst seenDomains = new Set(existing.map(r => String(r.domain || '').toLowerCase()).filter(Boolean));\nconst fresh = [];\nfor (const item of $('Score and flatten').all()) {\n  const r = item.json;\n  const link = norm(r.linkedin), domain = String(r.domain || '').toLowerCase();\n  if (seenLinks.has(link) || (domain && seenDomains.has(domain))) continue;\n  seenLinks.add(link);\n  if (domain) seenDomains.add(domain);\n  fresh.push(r);\n}\nfresh.sort((a, b) => b.fit_score - a.fit_score);\nreturn fresh.map(json => ({ json }));"
+      },
+      "id": "ae884e71-168a-4fe3-a75f-d6bbe1fce809",
+      "name": "Keep only new companies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
         0
       ]
     },
@@ -139,76 +184,109 @@
           "handlingExtraData": "insertInNewColumn"
         }
       },
-      "id": "4de01287-1b54-4b05-9063-bf5e67c2e040",
-      "name": "Append to sheet",
+      "id": "cce661ad-0ce3-4896-bddb-116f7330eaaa",
+      "name": "Add to sheet",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        780,
+        1100,
         0
       ]
     },
     {
       "parameters": {
-        "content": "## Build a LinkedIn company lead list in Google Sheets from a short description\n\n**Who's it for:** sales, growth and recruiting teams who need a list of companies like \"fintech in London with 51-200 employees\" with website, size, followers and headquarters, without a LinkedIn account or a Sales Navigator seat.\n\n**How it works**\n1. **Describe the companies** is a form: keywords, location, industry words, company sizes, headquarters and how many companies you want.\n2. **Find companies** runs the Apify Actor *LinkedIn Company Search*. It finds companies hiring for your keywords in that location plus their LinkedIn look-alikes, reads each public company page and keeps only the ones that match your filters (you pay only for matches).\n3. **One row per company** keeps the columns that matter for a CRM.\n4. **Append to sheet** adds them to the `Companies` tab.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Find companies**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Make a Google Sheet with a `Companies` tab, paste its link in **Append to sheet** and connect your Google Sheets credential.\n4. Open the form URL, describe the companies and submit.\n\n**Requirements:** an Apify account. $4 per 1,000 matching companies. The call waits up to about 4 minutes, enough for 20-40 companies; for bigger lists start the run asynchronously and fetch the dataset when it finishes.\n\n**How to customize:** add a *Tech Stack Detector* step on the `website` column, or send the list to your CRM instead of a sheet.",
-        "height": 860,
-        "width": 580
+        "jsCode": "const esc = s => String(s ?? '').replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\n// One e-mail to the requester with the count and the top 10 new companies.\nconst form = $('Describe the companies').first().json;\nconst rows = $('Keep only new companies').all().map(i => i.json);\nconst found = $('Score and flatten').all().length;\nconst top = rows.slice(0, 10).map(r => `<tr><td>${r.fit_score}</td><td><a href=\"${esc(r.linkedin)}\">${esc(r.company)}</a></td><td>${esc(r.industry)}</td><td>${esc(r.size)}</td><td>${esc(r.headquarters)}</td></tr>`).join('');\nreturn [{ json: {\n  sendTo: form['Send results to'],\n  subject: `${rows.length} new companies added for \"${form['Keywords']}\"`,\n  html: `<div style=\"font-family:Arial,sans-serif;font-size:14px\"><p>${found} companies matched; ${rows.length} were new and are now in your sheet (${found - rows.length} were already there).</p><table cellpadding=\"6\" style=\"border-collapse:collapse\"><tr><th align=\"left\">Fit</th><th align=\"left\">Company</th><th align=\"left\">Industry</th><th align=\"left\">Size</th><th align=\"left\">HQ</th></tr>${top}</table></div>`,\n} }];"
       },
-      "id": "fdc00ff0-1571-434a-937c-6697a7cfdfb8",
+      "id": "1fe8a000-c79a-4661-8a14-5c65088abf9e",
+      "name": "Build summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.sendTo }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "88c2f81d-c543-4391-b0f7-60ab6b85bfe4",
+      "name": "Email summary",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Build a de-duplicated LinkedIn company lead list in Google Sheets from a short description\n\n**Who's it for:** sales, growth and recruiting teams who need companies like \"fintech in London with 51-200 employees\" with website, size, followers and headquarters, without a LinkedIn account or a Sales Navigator seat, and who run the search again and again without creating duplicates.\n\n**How it works**\n1. **Describe the companies** is a form: keywords, location, industry words, company sizes, headquarters, how many, and who to notify.\n2. **Find companies** runs the Apify Actor *LinkedIn Company Search*. It finds companies hiring for your keywords plus their LinkedIn look-alikes, reads each public company page and keeps only the ones that match (you pay only for matches).\n3. **Score and flatten** keeps the CRM columns and adds a simple fit score (size match, hiring signal, followers, website).\n4. **Read existing companies** loads the `Companies` tab and **Keep only new companies** drops every company already there (same LinkedIn page or same website domain), so repeated searches only add new leads.\n5. **Add to sheet** appends the new companies, best fit first.\n6. **Email summary** tells the requester how many new companies were added, with the top 10.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Find companies**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Make a Google Sheet with a `Companies` tab, paste its link in **Read existing companies** and **Add to sheet**, and connect Google Sheets and Gmail.\n4. Open the form URL, describe the companies and submit.\n\n**Requirements:** an Apify account. $4 per 1,000 matching companies. The call waits up to about 4 minutes, enough for 20-40 companies. No new companies: nothing is added and no e-mail is sent.\n\n**How to customize:** change the weights in **Score and flatten**, add a tech-stack or e-mail-finder step on the `website` column, or send the new rows to your CRM instead of a sheet.",
+        "height": 1040,
+        "width": 620
+      },
+      "id": "da7cf33c-6081-43af-94a5-1aaba150bf7c",
       "name": "Template description",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -660,
-        -260
+        -720,
+        -320
       ]
     },
     {
       "parameters": {
-        "content": "### 1. Describe\nA form: keywords, location, industry, sizes, headquarters, how many.",
-        "height": 170,
-        "width": 240,
+        "content": "### 1. Describe and find\nA form, then only matching companies (the only ones charged). Needs a **Header Auth** credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 200,
+        "width": 460,
         "color": 7
       },
-      "id": "5c912f1d-3353-40b3-8890-83e699abe23c",
+      "id": "23897bd2-138b-4450-9a3f-4a8ce8888090",
       "name": "Step 1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -40,
-        -260
+        -60,
+        -320
       ]
     },
     {
       "parameters": {
-        "content": "### 2. Find\nOnly matching companies are charged. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
-        "height": 170,
-        "width": 240,
+        "content": "### 2. Score and de-duplicate\nFit score, then drop companies already in the `Companies` tab (same LinkedIn page or domain).",
+        "height": 200,
+        "width": 620,
         "color": 7
       },
-      "id": "5885d0e3-0432-4567-82e2-9cedba841e03",
+      "id": "97a37b80-c3cd-4259-8d71-a41ebc969dce",
       "name": "Step 2",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        220,
-        -260
+        420,
+        -320
       ]
     },
     {
       "parameters": {
-        "content": "### 3. Save\nOne row per company in the `Companies` tab.",
-        "height": 170,
-        "width": 440,
+        "content": "### 3. Save and notify\nNew companies appended, best fit first; the requester gets the count and top 10.",
+        "height": 200,
+        "width": 640,
         "color": 7
       },
-      "id": "1ebd1ae7-04b8-40d1-b049-583c6f8cd4e5",
+      "id": "d47e845a-d8f1-4b07-8e2d-b1e73849ff6a",
       "name": "Step 3",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        480,
-        -260
+        1060,
+        -320
       ]
     }
   ],
@@ -228,18 +306,62 @@
       "main": [
         [
           {
-            "node": "One row per company",
+            "node": "Score and flatten",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "One row per company": {
+    "Score and flatten": {
       "main": [
         [
           {
-            "node": "Append to sheet",
+            "node": "Read existing companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read existing companies": {
+      "main": [
+        [
+          {
+            "node": "Keep only new companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep only new companies": {
+      "main": [
+        [
+          {
+            "node": "Add to sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to sheet": {
+      "main": [
+        [
+          {
+            "node": "Build summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build summary": {
+      "main": [
+        [
+          {
+            "node": "Email summary",
             "type": "main",
             "index": 0
           }

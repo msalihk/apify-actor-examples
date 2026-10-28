@@ -1,5 +1,5 @@
 {
-  "name": "Add companies hiring for a role on LinkedIn to Google Sheets daily with Apify",
+  "name": "Score companies hiring on LinkedIn, track them in Google Sheets and alert on hot accounts with Apify",
   "nodes": [
     {
       "parameters": {
@@ -12,7 +12,7 @@
           ]
         }
       },
-      "id": "75d26a81-235d-42c3-a4c2-e1b54e3fc964",
+      "id": "0e6bf1f2-52a3-423a-94be-2930260e839f",
       "name": "Every morning",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -26,39 +26,51 @@
         "assignments": {
           "assignments": [
             {
-              "id": "cd546c94-9928-457b-8130-8e5177d3a4fe",
+              "id": "d8f492b7-d3a5-46cb-a4ab-6f7643217121",
               "name": "jobTitles",
               "type": "string",
               "value": "data engineer\nanalytics engineer"
             },
             {
-              "id": "fafe94d3-e50c-4f34-8a8f-24b590b632ac",
+              "id": "f2aae179-0896-45fb-8bfd-798a300c0fbf",
               "name": "locations",
               "type": "string",
               "value": "United Kingdom"
             },
             {
-              "id": "db71abf1-12f0-4a89-afb3-f7f89d816664",
+              "id": "5d0695b4-e2e1-447a-81fb-ac9f21fad48f",
               "name": "maxJobsPerSearch",
               "type": "number",
               "value": 200
             },
             {
-              "id": "0d1745a4-4430-48dd-ac71-75d7a4b817f0",
+              "id": "1fce55da-0c82-42ef-9b31-80651b672bef",
+              "name": "hotScore",
+              "type": "number",
+              "value": 60
+            },
+            {
+              "id": "fc5409b0-b5e2-4d46-9553-0106e0465347",
               "name": "monitorName",
               "type": "string",
               "value": "hiring-data"
+            },
+            {
+              "id": "ccd94313-5ab0-4972-a373-017e6fcb2457",
+              "name": "sendTo",
+              "type": "string",
+              "value": "you@example.com"
             }
           ]
         },
         "options": {}
       },
-      "id": "78311c1d-7314-4b44-9ddd-ec438d69ce3a",
+      "id": "c2c9dff6-53f0-4231-b75a-ac3770511d4d",
       "name": "Configure",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        240,
+        220,
         0
       ]
     },
@@ -70,36 +82,75 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ keywords: $json.jobTitles.split('\\n').map(s => s.trim()).filter(Boolean), locations: $json.locations.split('\\n').map(s => s.trim()).filter(Boolean), postedWithin: '24h', maxJobsPerSearch: $json.maxJobsPerSearch, excludeStaffingAgencies: true, includeJobDetails: false, onlyNewJobs: true, monitorName: $json.monitorName, outputMode: 'companies' }) }}",
+        "jsonBody": "={{ JSON.stringify({ keywords: $json.jobTitles.split('\\n').map(s => s.trim()).filter(Boolean), locations: $json.locations.split('\\n').map(s => s.trim()).filter(Boolean), postedWithin: '24h', maxJobsPerSearch: $json.maxJobsPerSearch, excludeStaffingAgencies: true, includeJobDetails: true, onlyNewJobs: true, monitorName: $json.monitorName, outputMode: 'companies' }) }}",
         "options": {
           "timeout": 310000
         }
       },
-      "id": "d8ce8121-f9a9-4628-ad68-705adad7557a",
+      "id": "b8d21e3f-ea4c-4ef4-83f0-f7dc30afbdeb",
       "name": "Find hiring companies",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        480,
+        440,
         0
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Flatten each hiring company into sheet columns.\nconst today = new Date().toISOString().slice(0, 10);\nreturn $input.all().map(i => i.json).filter(c => c.company).map(c => ({ json: {\n  date: today,\n  company: c.company,\n  linkedin: c.companyUrl || '',\n  jobs_found: c.jobsFound,\n  posted_last_7_days: c.postedLast7Days,\n  posted_last_30_days: c.postedLast30Days,\n  remote_jobs: c.remoteJobs,\n  ai_jobs: c.aiJobs,\n  titles: (c.sampleTitles || []).slice(0, 5).join(' | '),\n  locations: Object.keys(c.topLocations || {}).join(' | '),\n  first_job: (c.jobUrls || [])[0] || '',\n} }));"
+        "jsCode": "// Base hiring-intent signals for each company with new jobs today.\nreturn $input.all().map(i => i.json).filter(c => c.company).map(c => {\n  const titles = [...new Set((c.sampleTitles || []).map(t => t.toLowerCase()))];\n  const seniorities = Object.keys(c.seniority || {}).join(' ').toLowerCase();\n  return { json: {\n    linkedin: c.companyUrl || c.company,\n    company: c.company,\n    new_jobs: c.jobsFound || 0,\n    distinct_titles: titles.length,\n    senior_hire: /director|executive|head/.test(seniorities) || titles.some(t => /\\b(head|director|vp|chief|lead)\\b/.test(t)),\n    ai_jobs: c.aiJobs ?? 0,\n    remote_jobs: c.remoteJobs ?? 0,\n    titles: (c.sampleTitles || []).slice(0, 5).join(' | '),\n    locations: Object.keys(c.topLocations || {}).slice(0, 3).join(' | '),\n    latest_job: (c.jobUrls || [])[0] || '',\n  } };\n});"
       },
-      "id": "4966b41c-4e15-471f-9adc-ae9685b2a30b",
-      "name": "One row per company",
+      "id": "f3910712-b0cb-4929-ad9a-d9362e0cd511",
+      "name": "Score hiring intent",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
+        660,
         0
       ]
     },
     {
       "parameters": {
-        "operation": "append",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Hiring"
+        },
+        "options": {}
+      },
+      "id": "b1090149-7a6d-4b39-a7d5-e01a5cde6c70",
+      "name": "Read tracked companies",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        0
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge today's companies with the tracker: running totals, days seen hiring, 0-100 score and tier.\nconst cfg = $('Configure').first().json;\nconst today = new Date().toISOString().slice(0, 10);\nconst tracked = {};\nfor (const r of $input.all().map(i => i.json)) if (r.linkedin) tracked[r.linkedin] = r;\nreturn $('Score hiring intent').all().map(i => i.json).map(c => {\n  const old = tracked[c.linkedin] || {};\n  const totalJobs = Number(old.total_jobs || 0) + c.new_jobs;\n  const daysHiring = Number(old.days_hiring || 0) + (old.last_seen === today ? 0 : 1);\n  const reasons = [];\n  let score = [0, 25, 40, 55][Math.min(c.new_jobs, 3)]; reasons.push(`${c.new_jobs} new job(s) today`);\n  if (c.distinct_titles >= 2) { score += 10; reasons.push('several different roles'); }\n  if (c.senior_hire) { score += 15; reasons.push('senior hire'); }\n  if (c.ai_jobs) { score += 10; reasons.push('AI roles'); }\n  if (c.remote_jobs) { score += 5; reasons.push('remote roles'); }\n  if (daysHiring >= 2) { score += Math.min(daysHiring * 5, 20); reasons.push(`hiring on ${daysHiring} days, ${totalJobs} jobs so far`); }\n  score = Math.min(score, 100);\n  return { json: {\n    linkedin: c.linkedin,\n    company: c.company,\n    score,\n    tier: score >= cfg.hotScore ? 'hot' : score >= 40 ? 'warm' : 'watch',\n    reasons: reasons.join('; '),\n    new_jobs_today: c.new_jobs,\n    total_jobs: totalJobs,\n    days_hiring: daysHiring,\n    titles: c.titles,\n    locations: c.locations,\n    latest_job: c.latest_job,\n    first_seen: old.first_seen || today,\n    last_seen: today,\n  } };\n});"
+      },
+      "id": "daab67e3-fcf6-46d8-a7e2-a52214d166be",
+      "name": "Merge with tracker",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
         "documentId": {
           "__rl": true,
           "mode": "url",
@@ -113,83 +164,149 @@
         "columns": {
           "mappingMode": "autoMapInputData",
           "value": {},
-          "matchingColumns": [],
+          "matchingColumns": [
+            "linkedin"
+          ],
           "schema": []
         },
-        "options": {
-          "handlingExtraData": "insertInNewColumn"
-        }
+        "options": {}
       },
-      "id": "273ea7b5-244e-4ca5-a4d2-6b90b8668c3f",
-      "name": "Append to sheet",
+      "id": "af847fbc-549a-4b3c-a0bc-2b27c95304a3",
+      "name": "Update tracker",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        960,
-        0
+        1320,
+        -120
       ]
     },
     {
       "parameters": {
-        "content": "## Add the companies hiring for a role to Google Sheets every day\n\n**Who's it for:** recruiters, staffing agencies and B2B sales teams who sell to companies that are hiring (a new data team needs data tools; a new nurse ward needs scrubs) and want a daily list of who started hiring, from LinkedIn, without a LinkedIn account.\n\n**How it works**\n1. **Every morning** starts the workflow.\n2. **Find hiring companies** runs the Apify Actor *LinkedIn Jobs Scraper* for your job titles and locations, posted in the last 24 hours, with recruiting agencies removed and its new-jobs monitor on. It returns one row per hiring company with jobs found, jobs posted in the last 7 and 30 days, remote and AI jobs and sample titles.\n3. **One row per company** adds the date and the job titles.\n4. **Append to sheet** adds them to the `Hiring` tab.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Find hiring companies**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **Configure**, set the job titles and locations (one per line).\n4. Make a Google Sheet with a `Hiring` tab, paste its link in **Append to sheet** and connect Google Sheets.\n\n**Requirements:** an Apify account. $5 per 1,000 company rows; jobs already seen on earlier days are free.\n\n**How to customize:** change `postedWithin` to `week` for a weekly run, add a Slack message per new company, or pass each company's link to *LinkedIn Company Scraper* for size and website.",
-        "height": 860,
-        "width": 580
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a3b56b56-84d3-42cf-b465-373abaacdf4b",
+              "leftValue": "={{ $json.tier }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "hot"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
       },
-      "id": "fa4797b3-2771-4db0-ba57-8ef7e0ffd2fa",
+      "id": "8030e404-a6ce-4caf-8aa5-37973148da32",
+      "name": "Hot only",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = s => String(s ?? '').replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\n// One alert with every hot company.\nconst cfg = $('Configure').first().json;\nconst hot = $input.all().map(i => i.json).sort((a, b) => b.score - a.score);\nconst rows = hot.map(r => `<tr><td><b>${r.score}</b></td><td><a href=\"${esc(r.linkedin)}\">${esc(r.company)}</a></td><td>${esc(r.reasons)}</td><td>${esc(r.titles)}</td></tr>`).join('');\nreturn [{ json: {\n  sendTo: cfg.sendTo,\n  subject: `${hot.length} hot hiring account${hot.length > 1 ? 's' : ''} today: ${hot.slice(0, 3).map(r => r.company).join(', ')}`,\n  html: `<div style=\"font-family:Arial,sans-serif;font-size:14px\"><p>Companies hiring hard for ${esc(cfg.jobTitles.split('\\n').join(', '))}:</p><table cellpadding=\"6\" style=\"border-collapse:collapse\"><tr><th align=\"left\">Score</th><th align=\"left\">Company</th><th align=\"left\">Why</th><th align=\"left\">Roles</th></tr>${rows}</table></div>`,\n} }];"
+      },
+      "id": "a2120ba0-c477-4b71-9d32-18e1743f385a",
+      "name": "Build alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.sendTo }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0dbec4b3-9f27-49f5-ad4a-94ecd5786a4d",
+      "name": "Email hot accounts",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1760,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Score companies hiring for a role on LinkedIn, track them in Google Sheets and get an alert for hot accounts\n\n**Who's it for:** B2B sales teams that sell to companies building a team (a new data team needs data tools), recruiters and staffing agencies who want a daily, scored list of who is hiring, from LinkedIn, without a LinkedIn account.\n\n**How it works**\n1. **Every morning** starts the workflow.\n2. **Find hiring companies** runs the Apify Actor *LinkedIn Jobs Scraper* for your job titles and locations (last 24 hours, recruiting agencies removed, one row per hiring company with jobs found, jobs in the last 7 and 30 days, remote and AI jobs, sample titles).\n3. **Score hiring intent** collects the signals: new jobs today, several different roles, senior hires, AI and remote roles.\n4. **Read tracked companies** loads the `Hiring` tab and **Merge with tracker** adds running totals (jobs so far, days seen hiring, first seen) and gives each company a 0-100 score and a tier (hot, warm, watch) with the reasons. Companies that keep hiring day after day climb.\n5. **Update tracker** adds or updates one row per company (matched on the LinkedIn link).\n6. **Hot only** passes companies in the hot tier and **Email hot accounts** sends you one alert with them.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Find hiring companies**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **Configure**, set job titles and locations (one per line) and the alert address.\n4. Make a Google Sheet with a `Hiring` tab with a `linkedin` column header, paste its link in **Read tracked companies** and **Update tracker**, and connect Google Sheets and Gmail.\n\n**Requirements:** an Apify account. $5 per 1,000 company rows; jobs already seen on earlier days are free.\n\n**How to customize:** change `hotScore` in **Configure** or the weights in **Merge with tracker**, add a Slack message instead of the e-mail, or pass hot companies to *LinkedIn Company Scraper* for size and website.",
+        "height": 1060,
+        "width": 620
+      },
+      "id": "3c919cbe-ea84-498e-8734-83bafecf6b8b",
       "name": "Template description",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -660,
-        -260
+        -720,
+        -340
       ]
     },
     {
       "parameters": {
-        "content": "### 1. Configure\nJob titles and locations to watch, one per line.",
-        "height": 170,
-        "width": 440,
+        "content": "### 1. Find\nToday's new jobs for your titles, grouped by company, agencies removed. Needs a **Header Auth** credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 220,
+        "width": 680,
         "color": 7
       },
-      "id": "d70c049e-6226-4130-a229-5aeeb3d7f3ba",
+      "id": "5044bbc4-9efc-41b7-8b0d-7b5400761042",
       "name": "Step 1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -20,
-        -260
+        -60,
+        -340
       ]
     },
     {
       "parameters": {
-        "content": "### 2. Find\nToday's new jobs, grouped by company, agencies removed. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
-        "height": 170,
-        "width": 220,
+        "content": "### 2. Score and merge\nHiring signals plus running totals from the tracker give a 0-100 score and a tier.",
+        "height": 220,
+        "width": 600,
         "color": 7
       },
-      "id": "f044a5fc-4777-4176-a8b7-8ef1d0b59b8c",
+      "id": "9c0de9fc-d58c-4fa9-989d-bb5319f0e278",
       "name": "Step 2",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        440,
-        -260
+        640,
+        -340
       ]
     },
     {
       "parameters": {
-        "content": "### 3. Save\nOne row per hiring company in the `Hiring` tab.",
-        "height": 170,
-        "width": 440,
+        "content": "### 3. Track and alert\nOne row per company in `Hiring` (upsert on `linkedin`); one e-mail with the hot ones.",
+        "height": 220,
+        "width": 700,
         "color": 7
       },
-      "id": "111de6a9-ef0d-4565-92bc-af2722ac999c",
+      "id": "2d253c8c-7f0c-4c3e-8fb9-4eda666fe427",
       "name": "Step 3",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        680,
-        -260
+        1260,
+        -340
       ]
     }
   ],
@@ -220,18 +337,67 @@
       "main": [
         [
           {
-            "node": "One row per company",
+            "node": "Score hiring intent",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "One row per company": {
+    "Score hiring intent": {
       "main": [
         [
           {
-            "node": "Append to sheet",
+            "node": "Read tracked companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read tracked companies": {
+      "main": [
+        [
+          {
+            "node": "Merge with tracker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge with tracker": {
+      "main": [
+        [
+          {
+            "node": "Update tracker",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Hot only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hot only": {
+      "main": [
+        [
+          {
+            "node": "Build alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build alert": {
+      "main": [
+        [
+          {
+            "node": "Email hot accounts",
             "type": "main",
             "index": 0
           }
