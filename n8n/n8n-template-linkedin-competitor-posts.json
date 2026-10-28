@@ -1,5 +1,5 @@
 {
-  "name": "Email a weekly digest of competitors' new LinkedIn posts with Apify and Gmail",
+  "name": "Track competitors' LinkedIn posts, log them to Google Sheets and email a weekly brief with Apify",
   "nodes": [
     {
       "parameters": {
@@ -15,7 +15,7 @@
           ]
         }
       },
-      "id": "9644e987-7ac8-437a-8b7a-4d61b77a6b3d",
+      "id": "1b1c2f1c-1b54-4eac-b75c-f8a1386b53e0",
       "name": "Every Monday",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -29,25 +29,25 @@
         "assignments": {
           "assignments": [
             {
-              "id": "125eb1de-d564-448e-95ba-01b0d69673a0",
+              "id": "b5c4bfbe-dd17-43c8-8df8-0e5666f0132f",
               "name": "companies",
               "type": "string",
               "value": "https://www.linkedin.com/company/stripe/\nhttps://www.linkedin.com/company/adyen/\ncheckout.com"
             },
             {
-              "id": "d7833222-fbaa-490d-a9e0-b468813eec94",
+              "id": "674e6955-67c0-46fb-a6ba-9bc111dca9a8",
               "name": "skipReposts",
               "type": "boolean",
               "value": false
             },
             {
-              "id": "56dd3365-6ec3-4dc2-bb4c-68d6abbd09ad",
+              "id": "f8e3b62c-96c4-437c-a142-88d66b5c17a3",
               "name": "monitorName",
               "type": "string",
               "value": "competitors"
             },
             {
-              "id": "4cd26746-e8b0-4fb3-a2e6-18e7397f6396",
+              "id": "e30aa600-fcff-4d73-a1a8-737dd7bbbb54",
               "name": "sendTo",
               "type": "string",
               "value": "you@example.com"
@@ -56,12 +56,12 @@
         },
         "options": {}
       },
-      "id": "84355f6e-5dcf-453e-a83f-a43154de09b3",
+      "id": "3e93bcf4-deb7-4643-a278-fbdb83e7eb73",
       "name": "Configure",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        240,
+        220,
         0
       ]
     },
@@ -78,108 +78,154 @@
           "timeout": 310000
         }
       },
-      "id": "ca32de3f-4d5a-428e-8c6a-a997590e4491",
+      "id": "e65b094b-baf2-44d7-bbfc-a841fadc1238",
       "name": "Get new posts",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        480,
+        440,
         0
       ]
     },
     {
       "parameters": {
-        "jsCode": "// One plain-text e-mail with the new posts, grouped by company. No new posts: no e-mail.\nconst cfg = $('Configure').first().json;\nconst posts = $input.all().map(i => i.json).filter(p => p.id && p.url);\nif (!posts.length) return [];\nconst byCompany = {};\nfor (const p of posts) (byCompany[p.company || 'Unknown'] ||= []).push(p);\nconst blocks = Object.entries(byCompany).map(([company, list]) => {\n  list.sort((a, b) => (b.postedAt || '').localeCompare(a.postedAt || ''));\n  const lines = list.map(p => {\n    const text = (p.text || '').replace(/\\s+/g, ' ').slice(0, 280);\n    const by = p.isRepost && p.author ? ` (repost from ${p.author})` : '';\n    return `- ${(p.postedAt || '').slice(0, 10)}${by}: ${text}\\n  ${p.reactions ?? 0} reactions, ${p.comments ?? 0} comments · ${p.url}`;\n  });\n  return `${company} (${list.length})\\n${lines.join('\\n')}`;\n});\nreturn [{ json: {\n  sendTo: cfg.sendTo,\n  subject: `${posts.length} new LinkedIn post${posts.length > 1 ? 's' : ''} from ${Object.keys(byCompany).length} compan${Object.keys(byCompany).length > 1 ? 'ies' : 'y'}`,\n  text: blocks.join('\\n\\n'),\n} }];"
+        "jsCode": "// Tag each new post by topic, score engagement, flag standout posts. No posts: stop here.\nconst TOPICS = {\n  launch: /\\b(launch(ed|ing)?|introduc(e|ed|ing)|now (available|live|rolling out|supports|open)|rolling out|just dropped|new (model|feature|plan|mode|product)|release[ds]?|announc(e|es|ed|ing)|^new:)/i,\n  funding: /\\b(raised|funding|series [a-e]|seed round|investors?|valuation|ipo|s-1|acquir(e|ed|es|ing)|acquisition)\\b/i,\n  hiring: /\\b(we('| a)re hiring|hiring|join (our|the) team|open roles?|careers?|is joining|welcome (\\w+ )?to the team)\\b/i,\n  expansion: /\\b(new office|opened an office|new hub|expanding (to|access|into)|new (countries|markets|regions?)|coming to (europe|asia|the uk|the us))\\b/i,\n  event: /\\b(webinar|conference|summit|meetup|join us|meet us|booth|keynote|speakers|tickets?|devday|events?)\\b/i,\n  partnership: /\\b(partner(s|ship|ships|ed|ing)?|integration|teamed up|together with|working with)\\b/i,\n  customer: /\\b(customer story|case study|customers?|clients?|how \\w+ uses)\\b/i,\n};\nconst posts = $input.all().map(i => i.json).filter(p => p.id && p.url);\nif (!posts.length) return [];\nconst scores = posts.map(p => (p.reactions || 0) + 3 * (p.comments || 0)).sort((a, b) => a - b);\nconst top = scores[Math.floor(scores.length * 0.8)] ?? 0;\nreturn posts.map(p => {\n  const text = (p.text || '').replace(/\\s+/g, ' ').trim();\n  const topics = Object.keys(TOPICS).filter(t => TOPICS[t].test(text));\n  const engagement = (p.reactions || 0) + 3 * (p.comments || 0);\n  return { json: {\n    posted: (p.postedAt || '').slice(0, 10),\n    company: p.company || 'Unknown',\n    topics: topics.join(', ') || 'other',\n    engagement,\n    standout: engagement > 0 && engagement >= top ? 'yes' : '',\n    reactions: p.reactions ?? 0,\n    comments: p.comments ?? 0,\n    repost: p.isRepost ? 'yes' : '',\n    text: text.slice(0, 500),\n    url: p.url,\n    company_followers: p.companyFollowers ?? '',\n  } };\n});"
       },
-      "id": "7902d825-e375-4b8a-86f8-78f4e4d0513d",
-      "name": "Build digest",
+      "id": "f86de625-1e44-4342-b320-17fab5a14108",
+      "name": "Tag and score posts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
+        660,
         0
       ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Posts"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "c5655547-cda2-457d-ae6b-017504574dc5",
+      "name": "Log posts",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        900,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = s => String(s ?? '').replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\n// One HTML e-mail: topic summary, then each company's posts, most engaging first.\nconst cfg = $('Configure').first().json;\nconst posts = $('Tag and score posts').all().map(i => i.json);\nconst topicCount = {};\nfor (const p of posts) for (const t of p.topics.split(', ')) topicCount[t] = (topicCount[t] || 0) + 1;\nconst ranked = Object.entries(topicCount).sort((a, b) => b[1] - a[1]);\nconst summary = ranked.map(([t, n]) => `${n} ${t}`).join(' · ');\nconst headline = ranked.filter(([t]) => t !== 'other').slice(0, 3).map(([t, n]) => `${n} ${t}`).join(', ');\nconst byCompany = {};\nfor (const p of posts) (byCompany[p.company] ||= []).push(p);\nconst sections = Object.entries(byCompany)\n  .sort((a, b) => Math.max(...b[1].map(p => p.engagement)) - Math.max(...a[1].map(p => p.engagement)))\n  .map(([company, list]) => {\n    list.sort((a, b) => b.engagement - a.engagement);\n    const items = list.map(p => `<li style=\"margin-bottom:10px\">${p.standout ? '<b>★ </b>' : ''}<b>${esc(p.posted)}</b> <i>[${esc(p.topics)}]</i> ${esc(p.text.slice(0, 280))}${p.text.length > 280 ? '…' : ''}<br><small>${p.reactions} reactions · ${p.comments} comments · <a href=\"${esc(p.url)}\">open post</a></small></li>`).join('');\n    return `<h3 style=\"margin:18px 0 6px\">${esc(company)} (${list.length})</h3><ul style=\"padding-left:18px\">${items}</ul>`;\n  }).join('');\nconst companies = Object.keys(byCompany).length;\nreturn [{ json: {\n  sendTo: cfg.sendTo,\n  subject: `${posts.length} new LinkedIn post${posts.length > 1 ? 's' : ''} from ${companies} compan${companies > 1 ? 'ies' : 'y'}${headline ? ` (${headline})` : ''}`,\n  html: `<div style=\"font-family:Arial,sans-serif;font-size:14px;line-height:1.45\"><p><b>This week:</b> ${esc(summary)}. ★ = most engaging posts.</p>${sections}</div>`,\n} }];"
+      },
+      "id": "c6c9fed5-966e-404a-aabe-06ab00eed051",
+      "name": "Build brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        120
+      ],
+      "executeOnce": true
     },
     {
       "parameters": {
         "sendTo": "={{ $json.sendTo }}",
         "subject": "={{ $json.subject }}",
-        "emailType": "text",
-        "message": "={{ $json.text }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
         "options": {
           "appendAttribution": false
         }
       },
-      "id": "1515e63a-1eef-4d27-94b6-d7730e374488",
-      "name": "Email digest",
+      "id": "3f1d1fb0-e39d-49da-8006-26b0f3b47744",
+      "name": "Email brief",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        960,
-        0
+        1120,
+        120
       ]
     },
     {
       "parameters": {
-        "content": "## Get a weekly e-mail with your competitors' new LinkedIn posts\n\n**Who's it for:** founders, marketers and sales teams who want to know what competitors, customers or prospects announce on LinkedIn (launches, hires, funding, events) without scrolling LinkedIn every day.\n\n**How it works**\n1. **Every Monday** starts the workflow (change the schedule as you like).\n2. **Get new posts** runs the Apify Actor *LinkedIn Company Scraper* in posts mode with its new-posts monitor: it reads each company's public LinkedIn page (no LinkedIn login) and returns only the posts it has not returned before, with date, text, reactions, comments and link.\n3. **Build digest** groups the posts by company, newest first. No new posts: the workflow stops and no e-mail is sent.\n4. **Email digest** sends it with Gmail.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Get new posts**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **Configure**, list the companies (LinkedIn links, page names or websites, one per line) and the e-mail address.\n4. Connect your Gmail credential in **Email digest**. The first run returns the latest posts (up to 10 per company); later runs only new ones.\n\n**Requirements:** an Apify account. $1 per 1,000 posts returned; posts already sent are free.\n\n**How to customize:** set `skipReposts` to `true` for the companies' own posts only, change `monitorName` to keep separate lists, or swap Gmail for Slack or Telegram.",
-        "height": 820,
-        "width": 560
+        "content": "## Track competitors' LinkedIn posts: tag them, log them to Google Sheets and e-mail a weekly brief\n\n**Who's it for:** founders, product marketers and sales teams who want to know what competitors, customers or prospects announce on LinkedIn (launches, funding, hiring, events, partnerships) without scrolling LinkedIn, and want a searchable history of it.\n\n**How it works**\n1. **Every Monday** starts the workflow.\n2. **Get new posts** runs the Apify Actor *LinkedIn Company Scraper* in posts mode with its new-posts monitor. It reads each company's public LinkedIn page (no LinkedIn login) and returns only posts it has not returned before.\n3. **Tag and score posts** labels each post by topic (launch, funding, hiring, expansion, event, partnership, customer story), scores engagement and flags standout posts. No new posts: the workflow stops here.\n4. **Log posts** appends every post to the `Posts` tab, so you build a history you can filter by company and topic.\n5. **Build brief** writes an HTML e-mail: a topic summary first, then each company's posts, most engaging first.\n6. **Email brief** sends it with Gmail.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Get new posts**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **Configure**, list the companies (LinkedIn links, page names or websites, one per line) and the e-mail address.\n4. Make a Google Sheet with a `Posts` tab, paste its link in **Log posts**, and connect Google Sheets and Gmail.\n\n**Requirements:** an Apify account. $1 per 1,000 posts returned; posts already returned are free. The first run returns up to 10 latest posts per company; later runs only new ones.\n\n**How to customize:** edit the topic words in **Tag and score posts**, set `skipReposts` to `true` for the companies' own posts only, or send the brief to Slack instead of Gmail.",
+        "height": 980,
+        "width": 600
       },
-      "id": "eb5173b5-7795-4197-b78f-d36f0afc4451",
+      "id": "7cd49920-2027-4a76-9195-af118e68d193",
       "name": "Template description",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -640,
-        -260
+        -700,
+        -320
       ]
     },
     {
       "parameters": {
-        "content": "### 1. Configure\nThe companies to follow (LinkedIn links, page names or websites) and where to send the digest.",
-        "height": 170,
-        "width": 440,
+        "content": "### 1. Configure\nCompanies to follow (LinkedIn links, page names or websites) and where to send the brief.",
+        "height": 200,
+        "width": 420,
         "color": 7
       },
-      "id": "29527a98-d7c0-4dae-abc4-cd5bd1372a79",
+      "id": "5e65feaa-f2dc-45b3-85c5-e826986ee3f2",
       "name": "Step 1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -20,
-        -260
+        -60,
+        -320
       ]
     },
     {
       "parameters": {
-        "content": "### 2. Fetch\nOnly posts not sent before. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
-        "height": 170,
-        "width": 220,
+        "content": "### 2. Fetch and tag\nOnly posts not returned before, tagged by topic and scored by engagement. Needs a **Header Auth** credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 200,
+        "width": 440,
         "color": 7
       },
-      "id": "25877fc6-a5bb-46ea-9ff0-c8e2e3c05efa",
+      "id": "b2bc9af6-2464-4e6e-9472-471d9ee3e65c",
       "name": "Step 2",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        440,
-        -260
+        380,
+        -320
       ]
     },
     {
       "parameters": {
-        "content": "### 3. Digest\nPosts grouped by company. Nothing new: no e-mail. Swap Gmail for Slack or Telegram if you like.",
-        "height": 170,
+        "content": "### 3. Log and brief\nEvery post goes to the `Posts` tab; one HTML brief goes to your inbox.",
+        "height": 200,
         "width": 440,
         "color": 7
       },
-      "id": "1715b678-23d3-4fe9-8cd2-50499942eb8f",
+      "id": "3b747eff-4c12-4b83-8f4f-ee8c580c0588",
       "name": "Step 3",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        680,
-        -260
+        840,
+        -320
       ]
     }
   ],
@@ -210,18 +256,34 @@
       "main": [
         [
           {
-            "node": "Build digest",
+            "node": "Tag and score posts",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build digest": {
+    "Tag and score posts": {
       "main": [
         [
           {
-            "node": "Email digest",
+            "node": "Log posts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build brief": {
+      "main": [
+        [
+          {
+            "node": "Email brief",
             "type": "main",
             "index": 0
           }

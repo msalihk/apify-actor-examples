@@ -1,5 +1,5 @@
 {
-  "name": "Email a weekly broken link report for your website with Apify and Gmail",
+  "name": "Track broken links on your website week over week in Google Sheets and email a report with Apify",
   "nodes": [
     {
       "parameters": {
@@ -15,7 +15,7 @@
           ]
         }
       },
-      "id": "bd210e7f-c910-4c81-ad90-83c1557f0c71",
+      "id": "073db257-d04b-4d7f-a78b-9faddfecc3fd",
       "name": "Every Monday",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
@@ -29,31 +29,31 @@
         "assignments": {
           "assignments": [
             {
-              "id": "78e05366-40a1-4494-b15d-9f19e42ea788",
+              "id": "5c141c20-af90-4905-81a3-551c9c4a2a7e",
               "name": "siteUrl",
               "type": "string",
               "value": "https://example.com/"
             },
             {
-              "id": "e3686e7c-ede3-4453-ad5c-0e405c54a9a9",
+              "id": "7ada45d9-9b75-48fb-a2f3-79502a3a7411",
               "name": "maxPages",
               "type": "number",
               "value": 200
             },
             {
-              "id": "1067171a-a7af-4153-a76a-2341d635e7bb",
+              "id": "ad2ebe2f-eb07-4885-b8be-0ff65784faba",
               "name": "maxLinksToCheck",
               "type": "number",
               "value": 3000
             },
             {
-              "id": "4431e38f-1dc5-4922-afc1-85a806a3e55b",
+              "id": "5d2e0218-d901-4e53-921f-09830ef46c63",
               "name": "includeWarnings",
               "type": "boolean",
               "value": false
             },
             {
-              "id": "9f5948c8-7832-4ee1-b67a-f62def59e1a1",
+              "id": "715c6fe4-d81f-4cda-b0c8-3bebdc0c4ae7",
               "name": "sendTo",
               "type": "string",
               "value": "you@example.com"
@@ -62,12 +62,12 @@
         },
         "options": {}
       },
-      "id": "5a653d63-d06c-4649-9143-e5f9ebe5d7de",
+      "id": "8f99cbb3-2fca-4566-9bde-de2462a5ce67",
       "name": "Configure",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        240,
+        220,
         0
       ]
     },
@@ -84,109 +84,240 @@
           "timeout": 310000
         }
       },
-      "id": "0e1d4287-9ad3-4f8c-afe4-122e970d2010",
+      "id": "bef0eef5-3770-46fc-bdca-568ddcf1987e",
       "name": "Check links",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        480,
+        440,
         0
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Keep broken links (and warnings if asked) and write one plain-text e-mail. No problems: no e-mail.\nconst cfg = $('Configure').first().json;\nconst keep = cfg.includeWarnings ? ['error', 'warning'] : ['error'];\nconst rows = $input.all().map(i => i.json).filter(r => keep.includes(r.severity));\nif (!rows.length) return [];\nconst lines = rows.slice(0, 100).map(r => {\n  const where = (r.foundOn || []).map(s => `    on ${s.page}${s.text ? ` (\"${s.text}\")` : ''}`).join('\\n');\n  return `- ${r.url}\\n  ${r.status ?? ''} ${r.problem || ''} · ${r.linkType} ${r.kind || 'link'} · on ${r.foundOnCount || 1} page(s)\\n${where}`;\n});\nconst more = rows.length > 100 ? `\\n...and ${rows.length - 100} more. Open the run in Apify Console for the full list.` : '';\nreturn [{ json: {\n  sendTo: cfg.sendTo,\n  subject: `${rows.length} ${cfg.includeWarnings ? 'link problem(s)' : 'broken link(s)'} on ${new URL(cfg.siteUrl).hostname}`,\n  text: `Weekly link check for ${cfg.siteUrl}\\n\\n${lines.join('\\n\\n')}${more}\\n`,\n} }];"
+        "jsCode": "// One item with this week's broken links, most important first (internal, on many pages).\nconst cfg = $('Configure').first().json;\nconst keep = cfg.includeWarnings ? ['error', 'warning'] : ['error'];\nconst broken = $input.all().map(i => i.json).filter(r => r.url && keep.includes(r.severity)).map(r => ({\n  url: r.url,\n  status: r.status ?? '',\n  problem: r.problem || '',\n  type: `${r.linkType || ''} ${r.kind || 'link'}`.trim(),\n  pages: r.foundOnCount || (r.foundOn || []).length || 1,\n  found_on: (r.foundOn || []).slice(0, 3).map(s => s.page).join(' | '),\n  link_text: ((r.foundOn || [])[0] || {}).text || '',\n}));\nbroken.sort((a, b) => (a.type.startsWith('internal') ? 0 : 1) - (b.type.startsWith('internal') ? 0 : 1) || b.pages - a.pages);\nreturn [{ json: { site: cfg.siteUrl, broken } }];"
       },
-      "id": "9b3dfde6-3596-4b9a-a310-891c70b442ea",
+      "id": "e7b9862c-da6b-48e0-8702-f082745009ac",
+      "name": "Keep broken links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Broken links"
+        },
+        "options": {}
+      },
+      "id": "c09f9872-edb9-4d9c-b2e8-c2b8ee3da80f",
+      "name": "Read last week's log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        0
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare with the latest earlier week in the log: new, still broken, fixed.\nconst { site, broken } = $('Keep broken links').first().json;\nconst today = new Date().toISOString().slice(0, 10);\nconst log = $input.all().map(i => i.json).filter(r => r.url && r.site === site && r.week && r.week < today && r.state !== 'fixed');\nconst lastWeek = log.reduce((m, r) => (r.week > m ? r.week : m), '');\nconst before = new Set(log.filter(r => r.week === lastWeek).map(r => r.url));\nconst now = new Set(broken.map(r => r.url));\nconst rows = broken.map(r => ({ week: today, site, state: before.has(r.url) ? 'still broken' : 'new', ...r }));\nconst fixed = [...before].filter(u => !now.has(u)).map(url => ({ week: today, site, state: 'fixed', url }));\nreturn [{ json: { site, today, lastWeek, rows, fixed,\n  counts: { new: rows.filter(r => r.state === 'new').length, still: rows.filter(r => r.state !== 'new').length, fixed: fixed.length } } }];"
+      },
+      "id": "0e8a9617-71e5-433e-8f20-3d8bfa591763",
+      "name": "Compare with last week",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// One sheet row per broken or fixed link.\nconst { rows, fixed } = $input.first().json;\nreturn [...rows, ...fixed].map(json => ({ json }));"
+      },
+      "id": "53ac29f2-87dd-4989-b7b2-aa573295b702",
+      "name": "One row per link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Broken links"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "b9e99281-b675-41ec-b2b1-df3e15fdf564",
+      "name": "Log this week",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1540,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "242713a3-6746-45c9-a206-40acefc7f7f0",
+              "leftValue": "={{ $json.rows.length + $json.fixed.length }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 0
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "378390a6-cc6f-47bc-9203-ccb11a4d10fd",
+      "name": "Anything to report?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = s => String(s ?? '').replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\n// HTML report: new first, then still broken, then fixed.\nconst cfg = $('Configure').first().json;\nconst { site, rows, fixed, counts, lastWeek } = $('Compare with last week').first().json;\nconst host = new URL(site).hostname;\nconst table = list => `<table cellpadding=\"5\" style=\"border-collapse:collapse;font-size:13px\"><tr><th align=\"left\">Broken link</th><th align=\"left\">Status</th><th align=\"left\">Pages</th><th align=\"left\">First page with it</th></tr>${list.slice(0, 60).map(r => `<tr><td><a href=\"${esc(r.url)}\">${esc(r.url.slice(0, 80))}</a><br><small>${esc(r.type)}${r.link_text ? ` · \"${esc(r.link_text)}\"` : ''}</small></td><td>${esc(r.status || r.problem)}</td><td>${r.pages}</td><td>${esc((r.found_on || '').split(' | ')[0])}</td></tr>`).join('')}</table>${list.length > 60 ? `<p>…and ${list.length - 60} more in the sheet.</p>` : ''}`;\nconst parts = [];\nif (counts.new) parts.push(`<h3>New this week (${counts.new})</h3>${table(rows.filter(r => r.state === 'new'))}`);\nif (counts.still) parts.push(`<h3>Still broken since ${esc(lastWeek)} (${counts.still})</h3>${table(rows.filter(r => r.state !== 'new'))}`);\nif (counts.fixed) parts.push(`<h3>Fixed (${counts.fixed})</h3><ul>${fixed.slice(0, 60).map(r => `<li>${esc(r.url)}</li>`).join('')}</ul>`);\nreturn [{ json: {\n  sendTo: cfg.sendTo,\n  subject: `${host}: ${counts.new} new, ${counts.still} still broken, ${counts.fixed} fixed`,\n  html: `<div style=\"font-family:Arial,sans-serif;font-size:14px\"><p>Weekly link check for <a href=\"${esc(site)}\">${esc(site)}</a>.</p>${parts.join('')}</div>`,\n} }];"
+      },
+      "id": "aab801c4-7a5a-4326-99b2-df741631271b",
       "name": "Build report",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
-        0
+        1540,
+        100
       ]
     },
     {
       "parameters": {
         "sendTo": "={{ $json.sendTo }}",
         "subject": "={{ $json.subject }}",
-        "emailType": "text",
-        "message": "={{ $json.text }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
         "options": {
           "appendAttribution": false
         }
       },
-      "id": "61fc26d5-05f1-4ac8-ac2c-bb36e1241687",
+      "id": "89a9bb2e-a4d9-4277-9226-fac8e2b6282f",
       "name": "Email report",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        960,
-        0
-      ],
-      "webhookId": "5acc4c4b-7351-4080-b22d-eb0dc80a31b3"
+        1760,
+        100
+      ]
     },
     {
       "parameters": {
-        "content": "## Email yourself a weekly broken link report for your website\n\n**Who's it for:** site owners, SEO people and agencies who want to hear about 404s, dead external links and broken images before visitors and Google do, without installing a crawler.\n\n**How it works**\n1. **Every Monday** starts the workflow (change the schedule as you like).\n2. **Check links** runs the Apify Actor *Broken Link Checker*. It crawls your site from the start URL, checks every link and image it finds (internal and external) and returns each problem with the pages it is on and its link text.\n3. **Build report** keeps the broken links (404, 410, 5xx, dead domains, timeouts) and writes a plain-text e-mail. If nothing is broken, the workflow stops and no e-mail is sent.\n4. **Email report** sends it with Gmail.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Check links**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **Configure**, set your site, the page limit and the e-mail address.\n4. Connect your Gmail credential in **Email report** and run once to test.\n\n**Requirements:** an Apify account. $0.50 per 1,000 URLs checked; `maxLinksToCheck` caps the price of each run. The run is capped at about 4 minutes so it fits n8n's wait, which covers a site of a few hundred pages.\n\n**How to customize:** set `includeWarnings` to `true` to also list links that refuse automated checks (401, 403, 429), swap Gmail for Slack or Telegram, or loop over several sites.",
-        "height": 860,
-        "width": 560
+        "content": "## Track broken links on your website week over week: new, still broken and fixed, logged to Google Sheets\n\n**Who's it for:** site owners, SEO people and agencies who want to catch 404s, dead external links and broken images before visitors and Google do, and see whether last week's problems were fixed, without installing a crawler.\n\n**How it works**\n1. **Every Monday** starts the workflow.\n2. **Check links** runs the Apify Actor *Broken Link Checker*. It crawls your site, checks every link and image (internal and external) and returns each problem with the pages it is on and its link text.\n3. **Keep broken links** keeps real failures (404, 410, 5xx, dead domains, timeouts) and ranks them: internal links and links on many pages first.\n4. **Read last week's log** loads the `Broken links` tab and **Compare with last week** marks each link as *new* or *still broken* and lists links that were *fixed*.\n5. **Log this week** appends this week's broken links with their state, so the sheet becomes a history.\n6. **Anything to report?** stops when nothing is broken and nothing was fixed; otherwise **Email report** sends an HTML report: new problems first, then the ones still open, then what got fixed.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Check links**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **Configure**, set your site, the page limit and the e-mail address.\n4. Make a Google Sheet with a `Broken links` tab, paste its link in **Read last week's log** and **Log this week**, and connect Google Sheets and Gmail.\n\n**Requirements:** an Apify account. $0.50 per 1,000 URLs checked; `maxLinksToCheck` caps the price of each run. The run is capped at about 4 minutes, which covers a site of a few hundred pages.\n\n**How to customize:** set `includeWarnings` to `true` to also track links that refuse automated checks (401, 403, 429), loop over several sites, or send the report to Slack.",
+        "height": 1060,
+        "width": 620
       },
-      "id": "6d151d9c-b80e-4e3e-b54f-be7bac282c27",
+      "id": "8a77e966-e2e9-4f6f-82b8-4c5a3af88f2e",
       "name": "Template description",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -640,
-        -260
+        -720,
+        -340
       ]
     },
     {
       "parameters": {
-        "content": "### 1. Configure\nYour site, how many pages to crawl, a cap on URLs checked (and on the price) and where to send the report.",
-        "height": 170,
-        "width": 440,
+        "content": "### 1. Check\nCrawl the site and check every link and image. Needs a **Header Auth** credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 220,
+        "width": 680,
         "color": 7
       },
-      "id": "a1e85043-c664-41a0-881a-0ed876c17e9f",
+      "id": "500fa223-67cf-46dc-8b20-48612a4e14a7",
       "name": "Step 1",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -20,
-        -260
+        -60,
+        -340
       ]
     },
     {
       "parameters": {
-        "content": "### 2. Check\nCrawls the site and checks every link and image. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
-        "height": 170,
-        "width": 220,
+        "content": "### 2. Compare\nReal failures only, ranked; compared with the latest earlier week in the `Broken links` tab.",
+        "height": 220,
+        "width": 600,
         "color": 7
       },
-      "id": "01115a47-1cf9-4ff5-a7f9-8afb3e22eb97",
+      "id": "86eb517f-7ed3-4ecc-830c-17a22d3b0e38",
       "name": "Step 2",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        440,
-        -260
+        640,
+        -340
       ]
     },
     {
       "parameters": {
-        "content": "### 3. Report\nBroken links with the pages they are on. Nothing broken: no e-mail. Swap Gmail for Slack or Telegram if you like.",
-        "height": 170,
-        "width": 440,
+        "content": "### 3. Log and report\nThis week's state goes to the sheet; one HTML report unless nothing is broken or fixed.",
+        "height": 220,
+        "width": 700,
         "color": 7
       },
-      "id": "1db0ba1a-26dc-4272-9d69-fdee66823158",
+      "id": "8b387f12-8317-4f86-9a06-aa9a440bfc37",
       "name": "Step 3",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        680,
-        -260
+        1260,
+        -340
       ]
     }
   ],
@@ -214,6 +345,66 @@
       ]
     },
     "Check links": {
+      "main": [
+        [
+          {
+            "node": "Keep broken links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep broken links": {
+      "main": [
+        [
+          {
+            "node": "Read last week's log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read last week's log": {
+      "main": [
+        [
+          {
+            "node": "Compare with last week",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare with last week": {
+      "main": [
+        [
+          {
+            "node": "One row per link",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Anything to report?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per link": {
+      "main": [
+        [
+          {
+            "node": "Log this week",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to report?": {
       "main": [
         [
           {
