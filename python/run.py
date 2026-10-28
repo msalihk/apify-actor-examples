@@ -126,6 +126,44 @@ EXAMPLES = {
             "arxiv"
         ],
         "maxResultsPerQuery": 20
+    },
+    "linkedin-jobs-scraper": {
+        "keywords": [
+            "data engineer"
+        ],
+        "locations": [
+            "United Kingdom"
+        ],
+        "postedWithin": "week",
+        "maxJobsPerSearch": 50,
+        "excludeStaffingAgencies": True
+    },
+    "linkedin-company-scraper": {
+        "companies": [
+            "https://www.linkedin.com/company/stripe/",
+            "microsoft"
+        ],
+        "websites": [
+            "linear.app"
+        ]
+    },
+    "linkedin-company-search": {
+        "keywords": [
+            "fintech"
+        ],
+        "locations": [
+            "London"
+        ],
+        "industries": [
+            "Financial",
+            "Software"
+        ],
+        "companySizes": [
+            "11-50",
+            "51-200",
+            "201-500"
+        ],
+        "maxCompanies": 20
     }
 }
 

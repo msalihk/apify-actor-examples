@@ -1,0 +1,254 @@
+{
+  "name": "Build a LinkedIn company lead list in Google Sheets from a form with Apify",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Find companies on LinkedIn",
+        "formDescription": "Describe the companies you want. Results are added to your Google Sheet in a few minutes.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Keywords",
+              "placeholder": "fintech, payments",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Location",
+              "placeholder": "London"
+            },
+            {
+              "fieldLabel": "Industry contains",
+              "placeholder": "Financial, Software"
+            },
+            {
+              "fieldLabel": "Company sizes",
+              "fieldType": "dropdown",
+              "multiselect": true,
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "1-10"
+                  },
+                  {
+                    "option": "11-50"
+                  },
+                  {
+                    "option": "51-200"
+                  },
+                  {
+                    "option": "201-500"
+                  },
+                  {
+                    "option": "501-1000"
+                  },
+                  {
+                    "option": "1001-5000"
+                  },
+                  {
+                    "option": "5001-10000"
+                  },
+                  {
+                    "option": "10001+"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Headquarters in",
+              "placeholder": "London"
+            },
+            {
+              "fieldLabel": "How many companies",
+              "fieldType": "number",
+              "placeholder": "25"
+            }
+          ]
+        },
+        "options": {
+          "respondWithOptions": {
+            "values": {
+              "formSubmittedText": "Searching. Matching companies will appear in your Google Sheet in a few minutes."
+            }
+          }
+        }
+      },
+      "id": "f196c6a8-7573-46bc-8f96-3b6f71155965",
+      "name": "Describe the companies",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/saliga~linkedin-company-search/run-sync-get-dataset-items?timeout=280",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  keywords: ($json['Keywords'] || '').split(',').map(s => s.trim()).filter(Boolean),\n  locations: ($json['Location'] || '').split(',').map(s => s.trim()).filter(Boolean),\n  industries: ($json['Industry contains'] || '').split(',').map(s => s.trim()).filter(Boolean),\n  companySizes: [].concat($json['Company sizes'] || []),\n  headquartersIn: ($json['Headquarters in'] || '').split(',').map(s => s.trim()).filter(Boolean),\n  maxCompanies: Math.min(Number($json['How many companies']) || 25, 40),\n  includePosts: false\n}) }}",
+        "options": {
+          "timeout": 310000
+        }
+      },
+      "id": "c0d1c599-1db1-47bf-b56d-27c21734c529",
+      "name": "Find companies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten each company into the columns a CRM needs.\nreturn $input.all().map(i => i.json).filter(c => c.name).map(c => ({ json: {\n  company: c.name,\n  website: c.website || '',\n  domain: c.domain || '',\n  linkedin: c.url,\n  industry: c.industry || '',\n  size: c.companySize || '',\n  employees_on_linkedin: c.employeesOnLinkedIn ?? '',\n  followers: c.followers ?? '',\n  headquarters: c.headquarters || '',\n  country: (c.address || {}).country || '',\n  founded: c.foundedYear ?? '',\n  specialties: (c.specialties || []).join(', '),\n  found_via: c.foundVia || '',\n  added: new Date().toISOString().slice(0, 10),\n} }));"
+      },
+      "id": "325da112-6588-4f28-8948-5812b4f41e3a",
+      "name": "One row per company",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Companies"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "4de01287-1b54-4b05-9063-bf5e67c2e040",
+      "name": "Append to sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Build a LinkedIn company lead list in Google Sheets from a short description\n\n**Who's it for:** sales, growth and recruiting teams who need a list of companies like \"fintech in London with 51-200 employees\" with website, size, followers and headquarters, without a LinkedIn account or a Sales Navigator seat.\n\n**How it works**\n1. **Describe the companies** is a form: keywords, location, industry words, company sizes, headquarters and how many companies you want.\n2. **Find companies** runs the Apify Actor *LinkedIn Company Search*. It finds companies hiring for your keywords in that location plus their LinkedIn look-alikes, reads each public company page and keeps only the ones that match your filters (you pay only for matches).\n3. **One row per company** keeps the columns that matter for a CRM.\n4. **Append to sheet** adds them to the `Companies` tab.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Find companies**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. Make a Google Sheet with a `Companies` tab, paste its link in **Append to sheet** and connect your Google Sheets credential.\n4. Open the form URL, describe the companies and submit.\n\n**Requirements:** an Apify account. $4 per 1,000 matching companies. The call waits up to about 4 minutes, enough for 20-40 companies; for bigger lists start the run asynchronously and fetch the dataset when it finishes.\n\n**How to customize:** add a *Tech Stack Detector* step on the `website` column, or send the list to your CRM instead of a sheet.",
+        "height": 860,
+        "width": 580
+      },
+      "id": "fdc00ff0-1571-434a-937c-6697a7cfdfb8",
+      "name": "Template description",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Describe\nA form: keywords, location, industry, sizes, headquarters, how many.",
+        "height": 170,
+        "width": 240,
+        "color": 7
+      },
+      "id": "5c912f1d-3353-40b3-8890-83e699abe23c",
+      "name": "Step 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Find\nOnly matching companies are charged. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 170,
+        "width": 240,
+        "color": 7
+      },
+      "id": "5885d0e3-0432-4567-82e2-9cedba841e03",
+      "name": "Step 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        220,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Save\nOne row per company in the `Companies` tab.",
+        "height": 170,
+        "width": 440,
+        "color": 7
+      },
+      "id": "1ebd1ae7-04b8-40d1-b049-583c6f8cd4e5",
+      "name": "Step 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        480,
+        -260
+      ]
+    }
+  ],
+  "connections": {
+    "Describe the companies": {
+      "main": [
+        [
+          {
+            "node": "Find companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find companies": {
+      "main": [
+        [
+          {
+            "node": "One row per company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per company": {
+      "main": [
+        [
+          {
+            "node": "Append to sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
