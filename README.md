@@ -33,6 +33,9 @@ curl -s -X POST "https://api.apify.com/v2/acts/saliga~<actor>/run-sync-get-datas
 | [bulk-file-downloader](https://apify.com/saliga/bulk-file-downloader) | `{"urls":["https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"]}` | Stored file, public link, sha256, ZIP | $1 / 1,000 files |
 | [dataset-merge-dedupe](https://apify.com/saliga/dataset-merge-dedupe) | `{"datasetIds":["<id1>","<id2>"],"dedupeFields":["url"],"exportFormats":["csv"]}` | One merged, de-duplicated table + CSV/Excel | $0.50 / 1,000 rows |
 | [academic-paper-search](https://apify.com/saliga/academic-paper-search) | `{"queries":["retrieval augmented generation"],"sources":["openalex","arxiv"]}` | Papers with DOI, citations, PDF link | $3 / 1,000 papers |
+| [linkedin-jobs-scraper](https://apify.com/saliga/linkedin-jobs-scraper) | `{"keywords":["data engineer"],"locations":["United Kingdom"],"postedWithin":"week"}` | LinkedIn jobs with full description, salary, agency flag; or hiring companies | $1 / 1,000 jobs |
+| [linkedin-company-scraper](https://apify.com/saliga/linkedin-company-scraper) | `{"companies":["https://www.linkedin.com/company/stripe/"],"websites":["linear.app"]}` | Company details, recent posts, similar companies | $3 / 1,000 companies |
+| [linkedin-company-search](https://apify.com/saliga/linkedin-company-search) | `{"keywords":["fintech"],"locations":["London"],"companySizes":["51-200"]}` | Companies matching industry, size and HQ filters | $4 / 1,000 companies |
 
 Folders:
 - `mcp/`: use these Actors as tools from Claude, Cursor or any MCP client, with one URL.
@@ -45,6 +48,9 @@ Folders:
   - `n8n-template-keyword-search-volume.json`: monthly search volume history in Google Sheets plus a rising/falling summary by e-mail
   - `n8n-template-website-change-monitor.json`: weekly visual change report by e-mail with the diff images attached
   - `n8n-template-weekly-broken-link-report.json`: weekly broken link report by e-mail (Gmail)
+  - `n8n-template-linkedin-competitor-posts.json`: weekly e-mail digest of competitors' new LinkedIn posts (Gmail)
+  - `n8n-template-linkedin-company-leads.json`: form → LinkedIn company search → lead list in Google Sheets
+  - `n8n-template-linkedin-hiring-companies.json`: daily list of companies hiring for a role on LinkedIn in Google Sheets
 
   Import: n8n → Workflows → ⋯ → Import from File. Then add a *Header Auth* credential (`Authorization` = `Bearer YOUR_APIFY_TOKEN`) in the Apify HTTP Request node, and connect Google Sheets, Gmail or OpenAI where the workflow uses them.
 

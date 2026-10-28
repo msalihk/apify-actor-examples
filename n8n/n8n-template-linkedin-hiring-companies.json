@@ -1,0 +1,246 @@
+{
+  "name": "Add companies hiring for a role on LinkedIn to Google Sheets daily with Apify",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "75d26a81-235d-42c3-a4c2-e1b54e3fc964",
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cd546c94-9928-457b-8130-8e5177d3a4fe",
+              "name": "jobTitles",
+              "type": "string",
+              "value": "data engineer\nanalytics engineer"
+            },
+            {
+              "id": "fafe94d3-e50c-4f34-8a8f-24b590b632ac",
+              "name": "locations",
+              "type": "string",
+              "value": "United Kingdom"
+            },
+            {
+              "id": "db71abf1-12f0-4a89-afb3-f7f89d816664",
+              "name": "maxJobsPerSearch",
+              "type": "number",
+              "value": 200
+            },
+            {
+              "id": "0d1745a4-4430-48dd-ac71-75d7a4b817f0",
+              "name": "monitorName",
+              "type": "string",
+              "value": "hiring-data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "78311c1d-7314-4b44-9ddd-ec438d69ce3a",
+      "name": "Configure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/saliga~linkedin-jobs-scraper/run-sync-get-dataset-items?timeout=280",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ keywords: $json.jobTitles.split('\\n').map(s => s.trim()).filter(Boolean), locations: $json.locations.split('\\n').map(s => s.trim()).filter(Boolean), postedWithin: '24h', maxJobsPerSearch: $json.maxJobsPerSearch, excludeStaffingAgencies: true, includeJobDetails: false, onlyNewJobs: true, monitorName: $json.monitorName, outputMode: 'companies' }) }}",
+        "options": {
+          "timeout": 310000
+        }
+      },
+      "id": "d8ce8121-f9a9-4628-ad68-705adad7557a",
+      "name": "Find hiring companies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten each hiring company into sheet columns.\nconst today = new Date().toISOString().slice(0, 10);\nreturn $input.all().map(i => i.json).filter(c => c.company).map(c => ({ json: {\n  date: today,\n  company: c.company,\n  linkedin: c.companyUrl || '',\n  jobs_found: c.jobsFound,\n  posted_last_7_days: c.postedLast7Days,\n  posted_last_30_days: c.postedLast30Days,\n  remote_jobs: c.remoteJobs,\n  ai_jobs: c.aiJobs,\n  titles: (c.sampleTitles || []).slice(0, 5).join(' | '),\n  locations: Object.keys(c.topLocations || {}).join(' | '),\n  first_job: (c.jobUrls || [])[0] || '',\n} }));"
+      },
+      "id": "4966b41c-4e15-471f-9adc-ae9685b2a30b",
+      "name": "One row per company",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Hiring"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "id": "273ea7b5-244e-4ca5-a4d2-6b90b8668c3f",
+      "name": "Append to sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Add the companies hiring for a role to Google Sheets every day\n\n**Who's it for:** recruiters, staffing agencies and B2B sales teams who sell to companies that are hiring (a new data team needs data tools; a new nurse ward needs scrubs) and want a daily list of who started hiring, from LinkedIn, without a LinkedIn account.\n\n**How it works**\n1. **Every morning** starts the workflow.\n2. **Find hiring companies** runs the Apify Actor *LinkedIn Jobs Scraper* for your job titles and locations, posted in the last 24 hours, with recruiting agencies removed and its new-jobs monitor on. It returns one row per hiring company with jobs found, jobs posted in the last 7 and 30 days, remote and AI jobs and sample titles.\n3. **One row per company** adds the date and the job titles.\n4. **Append to sheet** adds them to the `Hiring` tab.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Find hiring companies**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **Configure**, set the job titles and locations (one per line).\n4. Make a Google Sheet with a `Hiring` tab, paste its link in **Append to sheet** and connect Google Sheets.\n\n**Requirements:** an Apify account. $5 per 1,000 company rows; jobs already seen on earlier days are free.\n\n**How to customize:** change `postedWithin` to `week` for a weekly run, add a Slack message per new company, or pass each company's link to *LinkedIn Company Scraper* for size and website.",
+        "height": 860,
+        "width": 580
+      },
+      "id": "fa4797b3-2771-4db0-ba57-8ef7e0ffd2fa",
+      "name": "Template description",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Configure\nJob titles and locations to watch, one per line.",
+        "height": 170,
+        "width": 440,
+        "color": 7
+      },
+      "id": "d70c049e-6226-4130-a229-5aeeb3d7f3ba",
+      "name": "Step 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Find\nToday's new jobs, grouped by company, agencies removed. Needs a **Header Auth** credential: `Authorization` = `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 170,
+        "width": 220,
+        "color": 7
+      },
+      "id": "f044a5fc-4777-4176-a8b7-8ef1d0b59b8c",
+      "name": "Step 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        440,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Save\nOne row per hiring company in the `Hiring` tab.",
+        "height": 170,
+        "width": 440,
+        "color": 7
+      },
+      "id": "111de6a9-ef0d-4565-92bc-af2722ac999c",
+      "name": "Step 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        680,
+        -260
+      ]
+    }
+  ],
+  "connections": {
+    "Every morning": {
+      "main": [
+        [
+          {
+            "node": "Configure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure": {
+      "main": [
+        [
+          {
+            "node": "Find hiring companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find hiring companies": {
+      "main": [
+        [
+          {
+            "node": "One row per company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per company": {
+      "main": [
+        [
+          {
+            "node": "Append to sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
