@@ -1,0 +1,589 @@
+{
+  "name": "Find companies hiring on LinkedIn, score them and draft AI account briefs with Apify, OpenAI and Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "0e6bf1f2-52a3-423a-94be-2930260e839f",
+      "name": "Every morning",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d8f492b7-d3a5-46cb-a4ab-6f7643217121",
+              "name": "jobTitles",
+              "type": "string",
+              "value": "data engineer\nanalytics engineer"
+            },
+            {
+              "id": "f2aae179-0896-45fb-8bfd-798a300c0fbf",
+              "name": "locations",
+              "type": "string",
+              "value": "United Kingdom"
+            },
+            {
+              "id": "5d0695b4-e2e1-447a-81fb-ac9f21fad48f",
+              "name": "maxJobsPerSearch",
+              "type": "number",
+              "value": 200
+            },
+            {
+              "id": "1fce55da-0c82-42ef-9b31-80651b672bef",
+              "name": "hotScore",
+              "type": "number",
+              "value": 60
+            },
+            {
+              "id": "fc5409b0-b5e2-4d46-9553-0106e0465347",
+              "name": "monitorName",
+              "type": "string",
+              "value": "hiring-data"
+            },
+            {
+              "id": "ccd94313-5ab0-4972-a373-017e6fcb2457",
+              "name": "sendTo",
+              "type": "string",
+              "value": "you@example.com"
+            },
+            {
+              "id": "10768723-6dd4-45c5-92c3-88f3c95c089d",
+              "name": "whatYouSell",
+              "type": "string",
+              "value": "A managed data pipeline tool that lets a small data team ship reliable dashboards without hiring a platform engineer."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c2c9dff6-53f0-4231-b75a-ac3770511d4d",
+      "name": "Configure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/saliga~linkedin-jobs-scraper/run-sync-get-dataset-items?timeout=280",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ keywords: $json.jobTitles.split('\\n').map(s => s.trim()).filter(Boolean), locations: $json.locations.split('\\n').map(s => s.trim()).filter(Boolean), postedWithin: '24h', maxJobsPerSearch: $json.maxJobsPerSearch, excludeStaffingAgencies: true, includeJobDetails: true, onlyNewJobs: true, monitorName: $json.monitorName, outputMode: 'companies' }) }}",
+        "options": {
+          "timeout": 310000
+        }
+      },
+      "id": "b8d21e3f-ea4c-4ef4-83f0-f7dc30afbdeb",
+      "name": "Find hiring companies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Base hiring-intent signals for each company with new jobs today.\nreturn $input.all().map(i => i.json).filter(c => c.company).map(c => {\n  const titles = [...new Set((c.sampleTitles || []).map(t => t.toLowerCase()))];\n  const seniorities = Object.keys(c.seniority || {}).join(' ').toLowerCase();\n  return { json: {\n    linkedin: c.companyUrl || c.company,\n    company: c.company,\n    new_jobs: c.jobsFound || 0,\n    distinct_titles: titles.length,\n    senior_hire: /director|executive|head/.test(seniorities) || titles.some(t => /\\b(head|director|vp|chief|lead)\\b/.test(t)),\n    ai_jobs: c.aiJobs ?? 0,\n    remote_jobs: c.remoteJobs ?? 0,\n    titles: (c.sampleTitles || []).slice(0, 5).join(' | '),\n    locations: Object.keys(c.topLocations || {}).slice(0, 3).join(' | '),\n    latest_job: (c.jobUrls || [])[0] || '',\n  } };\n});"
+      },
+      "id": "f3910712-b0cb-4929-ad9a-d9362e0cd511",
+      "name": "Score hiring intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Hiring"
+        },
+        "options": {}
+      },
+      "id": "b1090149-7a6d-4b39-a7d5-e01a5cde6c70",
+      "name": "Read tracked companies",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        0
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge today's companies with the tracker: running totals, days seen hiring, 0-100 score and tier.\nconst cfg = $('Configure').first().json;\nconst today = new Date().toISOString().slice(0, 10);\nconst tracked = {};\nfor (const r of $input.all().map(i => i.json)) if (r.linkedin) tracked[r.linkedin] = r;\nreturn $('Score hiring intent').all().map(i => i.json).map(c => {\n  const old = tracked[c.linkedin] || {};\n  const totalJobs = Number(old.total_jobs || 0) + c.new_jobs;\n  const daysHiring = Number(old.days_hiring || 0) + (old.last_seen === today ? 0 : 1);\n  const reasons = [];\n  let score = [0, 25, 40, 55][Math.min(c.new_jobs, 3)]; reasons.push(`${c.new_jobs} new job(s) today`);\n  if (c.distinct_titles >= 2) { score += 10; reasons.push('several different roles'); }\n  if (c.senior_hire) { score += 15; reasons.push('senior hire'); }\n  if (c.ai_jobs) { score += 10; reasons.push('AI roles'); }\n  if (c.remote_jobs) { score += 5; reasons.push('remote roles'); }\n  if (daysHiring >= 2) { score += Math.min(daysHiring * 5, 20); reasons.push(`hiring on ${daysHiring} days, ${totalJobs} jobs so far`); }\n  score = Math.min(score, 100);\n  return { json: {\n    linkedin: c.linkedin,\n    company: c.company,\n    score,\n    tier: score >= cfg.hotScore ? 'hot' : score >= 40 ? 'warm' : 'watch',\n    reasons: reasons.join('; '),\n    new_jobs_today: c.new_jobs,\n    total_jobs: totalJobs,\n    days_hiring: daysHiring,\n    titles: c.titles,\n    locations: c.locations,\n    latest_job: c.latest_job,\n    first_seen: old.first_seen || today,\n    last_seen: today,\n  } };\n});"
+      },
+      "id": "daab67e3-fcf6-46d8-a7e2-a52214d166be",
+      "name": "Merge with tracker",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Hiring"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "linkedin"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "af847fbc-549a-4b3c-a0bc-2b27c95304a3",
+      "name": "Update tracker",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1320,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a3b56b56-84d3-42cf-b465-373abaacdf4b",
+              "leftValue": "={{ $json.tier }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "hot"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "8030e404-a6ce-4caf-8aa5-37973148da32",
+      "name": "Hot only",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = s => String(s ?? '').replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\n// One e-mail: every hot company with its score, the reasons and the AI brief.\nconst cfg = $('Configure').first().json;\nconst hot = $input.all().map(i => i.json).sort((a, b) => b.score - a.score);\nconst cards = hot.map(r => `\n  <div style=\"border-left:4px solid #ff5a1f;padding:8px 12px;margin:0 0 14px\">\n    <div><b>${esc(r.company)}</b> &middot; score ${r.score} &middot; <a href=\"${esc(r.linkedin)}\">LinkedIn</a>${r.latest_job ? ` &middot; <a href=\"${esc(r.latest_job)}\">latest job</a>` : ''}</div>\n    <div style=\"color:#555\">${esc(r.reasons)}<br>Roles: ${esc(r.titles)}</div>\n    <p style=\"margin:8px 0 4px\"><b>Why now:</b> ${esc(r.ai_why_now)}<br><b>Angle:</b> ${esc(r.ai_angle)}</p>\n    <p style=\"margin:4px 0\"><b>Opening line:</b> <i>${esc(r.ai_opening_line)}</i></p>\n    <p style=\"margin:4px 0;color:#555\"><b>Ask:</b> ${esc(r.ai_questions)}</p>\n  </div>`).join('');\nreturn [{ json: {\n  sendTo: cfg.sendTo,\n  subject: `${hot.length} hot hiring account${hot.length > 1 ? 's' : ''} with briefs: ${hot.slice(0, 3).map(r => r.company).join(', ')}`,\n  html: `<div style=\"font-family:Arial,sans-serif;font-size:14px;max-width:680px\"><p>Companies hiring hard for ${esc(cfg.jobTitles.split('\\n').join(', '))} today, with an account brief for each. The briefs only use the hiring signals; check them before you send anything.</p>${cards}</div>`,\n} }];"
+      },
+      "id": "a2120ba0-c477-4b71-9d32-18e1743f385a",
+      "name": "Build alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.sendTo }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "0dbec4b3-9f27-49f5-ad4a-94ecd5786a4d",
+      "name": "Email hot accounts",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2420,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Find companies hiring on LinkedIn, score them and get an AI account brief for each hot one\n\n**Who's it for:** B2B sales and SDR teams that sell to companies building a team (a new data team needs data tools), and recruiters who want a daily, scored list of who is hiring, with a ready brief for the best accounts. No LinkedIn account needed.\n\n**How it works**\n1. **Every morning** starts the workflow.\n2. **Find hiring companies** runs the Apify Actor *LinkedIn Jobs Scraper* for your job titles and locations (last 24 hours, recruiting agencies removed, one row per hiring company, only jobs not seen before).\n3. **Score hiring intent** collects the signals: new jobs today, several different roles, senior hires, AI and remote roles.\n4. **Read tracked companies** loads the `Hiring` tab and **Merge with tracker** adds running totals (jobs so far, days seen hiring, first seen) and gives each company a 0-100 score, a tier (hot, warm, watch) and the reasons. Companies that keep hiring climb.\n5. **Update tracker** upserts one row per company (matched on the LinkedIn link).\n6. **Hot only** keeps the hot tier. **Write account brief** (OpenAI) turns each company's hiring signals and your offer into: why now, an angle for what you sell, an opening line and two discovery questions. The **Brief format** parser keeps the answer structured, and the prompt tells the model to use only the signals, never invented facts.\n7. **Save briefs** writes the brief to the company's row; **Email hot accounts** sends one e-mail with every hot company, its score, reasons and brief.\n\n**How to set up**\n1. Create a free Apify account and copy your API token (Apify Console → Settings → API & Integrations).\n2. In **Find hiring companies**, create a *Header Auth* credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.\n3. In **OpenAI Chat Model**, add your OpenAI credential.\n4. In **Configure**, set job titles and locations (one per line), one sentence on what you sell, and the alert address.\n5. Make a Google Sheet with a `Hiring` tab with a `linkedin` column header, paste its link in **Read tracked companies**, **Update tracker** and **Save briefs**, and connect Google Sheets and Gmail.\n\n**Requirements:** an Apify account ($5 per 1,000 company rows; jobs already seen on earlier days are free) and an OpenAI API key (one short call per hot company).\n\n**How to customize:** change `hotScore` or the weights in **Merge with tracker**, swap the model, send the briefs to Slack or your CRM instead of e-mail, or pass hot companies to *LinkedIn Company Scraper* for company size and website before the brief.",
+        "height": 1180,
+        "width": 620
+      },
+      "id": "3c919cbe-ea84-498e-8734-83bafecf6b8b",
+      "name": "Template description",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        -340
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Find\nToday's new jobs for your titles, grouped by company, agencies removed. Needs a **Header Auth** credential: name `Authorization`, value `Bearer YOUR_APIFY_TOKEN`.",
+        "height": 220,
+        "width": 680,
+        "color": 7
+      },
+      "id": "5044bbc4-9efc-41b7-8b0d-7b5400761042",
+      "name": "Step 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -340
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Score and merge\nHiring signals plus running totals from the tracker give a 0-100 score and a tier.",
+        "height": 220,
+        "width": 600,
+        "color": 7
+      },
+      "id": "9c0de9fc-d58c-4fa9-989d-bb5319f0e278",
+      "name": "Step 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -340
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Track\nOne row per company in `Hiring` (upsert on `linkedin`), hot ones go on to the AI step.",
+        "height": 220,
+        "width": 260,
+        "color": 7
+      },
+      "id": "2d253c8c-7f0c-4c3e-8fb9-4eda666fe427",
+      "name": "Step 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1260,
+        -340
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=What we sell: {{ $('Configure').first().json.whatYouSell }}\n\nCompany: {{ $json.company }}\nHiring signals: {{ $json.reasons }}\nOpen roles: {{ $json.titles }}\nLocations: {{ $json.locations }}\n\nWrite a short account brief for a salesperson who will contact this company. Use only the facts above.",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You prepare account briefs for B2B outreach. Be concrete and short. Never invent facts about the company: if the hiring signals do not support a claim, leave it out. Write in plain English without hype."
+            }
+          ]
+        }
+      },
+      "id": "094b4cc3-4b3b-4494-ada1-14e9ea2880a9",
+      "name": "Write account brief",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        1540,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "9ad5cfa4-2f4c-4e08-8e8e-27f74f76b224",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1480,
+        320
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"why_now\": \"One sentence on what the hiring suggests the company is building right now.\",\n  \"angle\": \"One sentence on how what we sell helps with that.\",\n  \"opening_line\": \"A first line for an outreach message that refers to the hiring, under 30 words.\",\n  \"discovery_questions\": [\n    \"A question to ask on a first call\",\n    \"Another question\"\n  ]\n}"
+      },
+      "id": "6e41e652-3390-4077-9a7c-5fd6eb38f49d",
+      "name": "Brief format",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1680,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Put each AI brief next to its company (the chain keeps the item order of 'Hot only').\nconst hot = $('Hot only').all().map(i => i.json);\nreturn $input.all().map((item, k) => {\n  const b = item.json.output || {};\n  const h = hot[k] || {};\n  return { json: {\n    linkedin: h.linkedin,\n    company: h.company,\n    score: h.score,\n    reasons: h.reasons,\n    titles: h.titles,\n    latest_job: h.latest_job,\n    ai_why_now: b.why_now || '',\n    ai_angle: b.angle || '',\n    ai_opening_line: b.opening_line || '',\n    ai_questions: (b.discovery_questions || []).join(' | '),\n    brief_date: new Date().toISOString().slice(0, 10),\n  } };\n});"
+      },
+      "id": "e3ac9f8a-0ba1-4174-bee4-98a7114d10fb",
+      "name": "Attach brief to company",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Hiring"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "linkedin"
+          ],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "5a3fc46e-61e5-48c2-a3ba-dc94463a00b5",
+      "name": "Save briefs",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2200,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 4. Brief and alert\nFor each hot company the model writes why now, an angle, an opening line and two questions, from the hiring signals only. Briefs are saved to the same row and sent in one e-mail.",
+        "height": 560,
+        "width": 1180,
+        "color": 7
+      },
+      "id": "0b199c5f-d8c3-428f-9274-5d9fc17662b4",
+      "name": "Step 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        -340
+      ]
+    }
+  ],
+  "connections": {
+    "Every morning": {
+      "main": [
+        [
+          {
+            "node": "Configure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure": {
+      "main": [
+        [
+          {
+            "node": "Find hiring companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find hiring companies": {
+      "main": [
+        [
+          {
+            "node": "Score hiring intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score hiring intent": {
+      "main": [
+        [
+          {
+            "node": "Read tracked companies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read tracked companies": {
+      "main": [
+        [
+          {
+            "node": "Merge with tracker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge with tracker": {
+      "main": [
+        [
+          {
+            "node": "Update tracker",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Hot only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hot only": {
+      "main": [
+        [
+          {
+            "node": "Write account brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build alert": {
+      "main": [
+        [
+          {
+            "node": "Email hot accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write account brief": {
+      "main": [
+        [
+          {
+            "node": "Attach brief to company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Write account brief",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brief format": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Write account brief",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach brief to company": {
+      "main": [
+        [
+          {
+            "node": "Save briefs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
